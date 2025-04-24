@@ -1,0 +1,10 @@
+[nagare.commands]
+mcp = nagare.admin.mcp:Commands
+
+[nagare.commands.mcp]
+info = nagare.admin.mcp:Info
+tools = nagare.admin.mcp:Tools
+
+[nagare.commands.mcp.tools]
+list = nagare.admin.mcp:ToolsList
+call = nagare.admin.mcp:ToolsCall

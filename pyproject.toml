@@ -1,0 +1,69 @@
+# --
+# (C)opyright Net-ng 2008-2025
+#
+# This is Net-ng proprietary source code
+# Any reproduction modification or use without prior written
+# approval from Net-ng is strictly forbidden.
+# --
+
+[build-system]
+requires = ['setuptools', 'wheel', 'setuptools_scm']
+build-backend = 'setuptools.build_meta'
+
+[tool.setuptools_scm]
+
+[project]
+name = 'nagare-server-mcp'
+dynamic = ['version', 'entry-points']
+description = 'Nagare MCP server'
+authors = [{ name = 'Net-ng' }, { email = 'contact@net-ng.com' }]
+license = { file = 'LICENSE.txt' }
+requires-python = '>=3.7'
+dependencies = ['nagare-server-http', 'requests-sse']
+
+[project.readme]
+file = 'README.rst'
+content-type = 'text/x-rst'
+
+[tool.setuptools.dynamic]
+entry-points = { file = 'entry-points.txt' }
+
+[project.optional-dependencies]
+dev = ['sphinx', 'sphinx_rtd_theme', 'pre-commit', 'ruff', 'pytest', 'twine']
+
+[project.urls]
+Homepage = 'https://nagare.org'
+Documentation = 'https://nagare.org/doc'
+Source = 'https://github.com/nagareproject/server-mcp'
+Tracker = 'https://github.com/nagareproject/server-mcp/issues'
+
+[tool.ruff]
+src = ['src']
+line-length = 120
+format.quote-style = 'single'
+
+[tool.ruff.lint]
+select = [
+    'C4',
+    'COM',
+    'D',
+    'E',
+    'ERA',
+    'F',
+    'I',
+    'ISC',
+    'INP',
+    'PIE',
+    'Q',
+    'S',
+    'TID',
+    'W',
+    'YTT',
+]
+ignore = ['COM812', 'D10', 'D401', 'ISC001']
+isort.length-sort = true
+pydocstyle.convention = 'google'
+flake8-quotes.inline-quotes = 'single'
+
+[tool.pytest.ini_options]
+testpaths = ['tests']
