@@ -4,14 +4,14 @@ Nagare Model Context Protocol server
 
 Features:
 
-  - Currently only for tools publication
+  - Currently only for tools and (direct) resources
   - Currently only on SSE protocol (not stdio nor websocket)
   - Admin commands for tools invocations available
 
 Reverse proxy
 =============
 
-To serve SSE, a `nginx` with `nchan` module must be set as a reverse proxy. With configuration:
+To serve SSE, a ``nginx`` with ``nchan`` module must be set as a reverse proxy. With configuration:
 
 .. code::
 
@@ -67,10 +67,31 @@ MCP server example
 
             self.register_tool(add)
 
+            self.register_resource(resource1, 'examples://r1, 'r1')
+            self.register_resource(resource2, 'examples://r2, 'r2')
+            self.register_resource(resource3, 'examples://r3, 'r3', mime_type='text/html')
+            self.register_resource(resource4, 'examples://r4, 'r4', mime_type='image/jpeg')
+
 
     def add(a: int, b: int) -> int:
         """Add two numbers."""
         return a + b
+
+    def resource1(uri, name):
+        # In-memory text resource
+        return 'Resource #1'
+
+    def resource2(uri, name):
+        # In-memory binary resource
+        return b'Resource #2'
+
+    def resource3(uri, name):
+        # Text stream resource
+        return open('/tmp/index.html')
+
+    def resource4(uri, name):
+        # Binary stream resource
+        return open('/tmp/logo.jpeg', 'rb')
 
 Admin commands
 ==============
@@ -79,6 +100,10 @@ Admin commands
 
     nagare mcp info http://127.0.0.1:9000/sse
 
-    nagare mcp tools list http://127.0.0.1:9000/see
+    nagare mcp tools list http://127.0.0.1:9000/sse
 
     nagare mcp tools call add -p a=10 -p b=20 http://127.0.0.1:9000/sse
+
+    nagare resources list http://127.0.0.1:9000/sse
+
+    nagare resources read <uri> http://127.0.0.1:9000/sse

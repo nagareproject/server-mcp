@@ -3,8 +3,14 @@ mcp = nagare.admin.mcp:Commands
 
 [nagare.commands.mcp]
 info = nagare.admin.mcp:Info
+resources = nagare.admin.mcp:Resources
 tools = nagare.admin.mcp:Tools
 
 [nagare.commands.mcp.tools]
 list = nagare.admin.mcp:ToolsList
 call = nagare.admin.mcp:ToolsCall
+
+[nagare.commands.mcp.resources]
+list = nagare.admin.mcp:ResourcesList
+describe = nagare.admin.mcp:ResourcesDescribe
+read = nagare.admin.mcp:ResourcesRead

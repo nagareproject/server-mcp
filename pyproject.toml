@@ -19,7 +19,7 @@ description = 'Nagare MCP server'
 authors = [{ name = 'Net-ng' }, { email = 'contact@net-ng.com' }]
 license = { file = 'LICENSE.txt' }
 requires-python = '>=3.7'
-dependencies = ['nagare-server-http', 'requests-sse']
+dependencies = ['nagare-server-http', 'sseclient-py', 'httpx']
 
 [project.readme]
 file = 'README.rst'
@@ -60,7 +60,7 @@ select = [
     'W',
     'YTT',
 ]
-ignore = ['COM812', 'D10', 'D401', 'ISC001']
+ignore = ['COM812', 'D10']
 isort.length-sort = true
 pydocstyle.convention = 'google'
 flake8-quotes.inline-quotes = 'single'
