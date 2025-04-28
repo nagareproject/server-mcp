@@ -1,16 +1,20 @@
+[nagare.mcp.capabilities]
+tools = nagare.server.mcp.tools:Tools
+resources = nagare.server.mcp.resources:Resources
+
 [nagare.commands]
-mcp = nagare.admin.mcp:Commands
+mcp = nagare.admin.mcp.commands:Commands
 
 [nagare.commands.mcp]
-info = nagare.admin.mcp:Info
-resources = nagare.admin.mcp:Resources
-tools = nagare.admin.mcp:Tools
+info = nagare.admin.mcp.commands:Info
+resources = nagare.admin.mcp.resources:Resources
+tools = nagare.admin.mcp.tools:Tools
 
 [nagare.commands.mcp.tools]
-list = nagare.admin.mcp:ToolsList
-call = nagare.admin.mcp:ToolsCall
+list = nagare.admin.mcp.tools:List
+call = nagare.admin.mcp.tools:Call
 
 [nagare.commands.mcp.resources]
-list = nagare.admin.mcp:ResourcesList
-describe = nagare.admin.mcp:ResourcesDescribe
-read = nagare.admin.mcp:ResourcesRead
+list = nagare.admin.mcp.resources:List
+describe = nagare.admin.mcp.resources:Describe
+read = nagare.admin.mcp.resources:Read
