@@ -56,7 +56,7 @@ class Resources(Plugin, dict):
                     'contents': [
                         {
                             'uri': uri,
-                            'mimeType': mime_type or 'x-application/bytes',
+                            'mimeType': mime_type or 'application/octet-stream',
                             'blob': b64encode(data).decode('ascii'),
                         },
                     ],
@@ -73,7 +73,8 @@ class Resources(Plugin, dict):
                         'contents': [
                             {
                                 'uri': uri,
-                                'mimeType': mime_type or ('x-application/bytes' if is_binary_stream else 'text/plain'),
+                                'mimeType': mime_type
+                                or ('application/octet-stream' if is_binary_stream else 'text/plain'),
                                 ('blob' if is_binary_stream else 'text'): '{stream}',
                             },
                         ],

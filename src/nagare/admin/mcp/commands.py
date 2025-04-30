@@ -39,9 +39,20 @@ class Command(admin.Command):
 
     @staticmethod
     def receive_events(url, queue):
-        with httpx.stream('GET', url, headers={'Accept': 'text/event-stream'}) as stream:
-            for event in sseclient.SSEClient(stream.iter_bytes()).events():
-                queue.put(event)
+        try:
+            with httpx.stream('GET', url, headers={'Accept': 'text/event-stream'}) as stream:
+                for event in sseclient.SSEClient(stream.iter_bytes()).events():
+                    queue.put(event)
+        except Exception as exc:
+            queue.put(exc)
+
+    @staticmethod
+    def receive_event(queue):
+        event = queue.get()
+        if isinstance(event, Exception):
+            raise event
+
+        return event
 
     def start_events_listener(self, url):
         events = Queue()
@@ -50,8 +61,7 @@ class Command(admin.Command):
         t.daemon = True
         t.start()
 
-        event = events.get()
-
+        event = self.receive_event(events)
         if event.event == 'endpoint':
             self.endpoint = 'http://localhost:9000' + event.data
 
@@ -61,7 +71,8 @@ class Command(admin.Command):
         data = {'jsonrpc': '2.0', 'id': 0, 'method': method, 'params': params}
 
         httpx.post(self.endpoint, json=data, timeout=5)
-        response = events.get().data
+        response = self.receive_event(events).data
+
         return json.loads(response)['result']
 
     def initialize(self, url):

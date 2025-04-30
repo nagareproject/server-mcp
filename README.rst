@@ -16,6 +16,12 @@ To serve SSE, a ``nginx`` with ``nchan`` module must be set as a reverse proxy. 
 .. code::
 
     ...
+    worker_processes  20;
+
+    events {
+        worker_connections  1024;
+    }
+
     http {
         server {
             listen       9000;
@@ -23,11 +29,11 @@ To serve SSE, a ``nginx`` with ``nchan`` module must be set as a reverse proxy. 
 
             location ~ /sub/([a-f0-9-]+)$ {
                 internal;
-
                 nchan_subscriber;
-                nchan_channel_id $1;
 
+                nchan_channel_id $1;
                 nchan_subscribe_request /_sub/$nchan_channel_id;
+                nchan_subscriber_first_message newest;
             }
 
             location ~ /_sub/([a-f0-9-]+)$ {
@@ -49,9 +55,9 @@ To serve SSE, a ``nginx`` with ``nchan`` module must be set as a reverse proxy. 
 
             location ~ /pub/([a-f0-9-]+)$ {
                 nchan_publisher;
+
                 nchan_channel_id $1;
-                nchan_message_buffer_length 0;
-            }
+                nchan_store_messages off;            }
         }
     }
     ...
@@ -70,10 +76,10 @@ MCP server example
 
             self.register_tool(add)
 
-            self.register_direct_resource(resource1, 'examples://r1, 'r1')
-            self.register_direct_resource(resource2, 'examples://r2, 'r2')
-            self.register_direct_resource(resource3, 'examples://r3, 'r3', mime_type='text/html')
-            self.register_direct_resource(resource4, 'examples://r4, 'r4', mime_type='image/jpeg')
+            self.register_direct_resource(resource1, 'examples://r1', 'r1')
+            self.register_direct_resource(resource2, 'examples://r2', 'r2')
+            self.register_direct_resource(resource3, 'examples://r3', 'r3', mime_type='text/html')
+            self.register_direct_resource(resource4, 'examples://r4', 'r4', mime_type='image/jpeg')
 
 
     def add(a: int, b: int) -> int:

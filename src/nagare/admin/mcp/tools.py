@@ -6,7 +6,7 @@
 # the file LICENSE.txt, which you should have received as part of
 # this distribution.
 # --
-from ast import Expr, Name, Return, Constant, FunctionDef, arg, unparse, arguments, fix_missing_locations
+from ast import Expr, Name, Module, Return, Constant, FunctionDef, arg, arguments, fix_missing_locations
 from pydoc import plaintext
 from pprint import pprint
 
@@ -40,7 +40,7 @@ class Tool(Command):
         )
 
         globals_ = {}
-        exec(unparse(fix_missing_locations(func)), globals_)  # noqa: S102
+        exec(compile(fix_missing_locations(Module([func])), '', 'exec'), globals_)  # noqa: S102
 
         return globals_[name]
 
