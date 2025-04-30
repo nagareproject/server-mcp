@@ -9,12 +9,11 @@
 
 import json
 import uuid
+import queue
+import threading
 from base64 import b64encode
 from functools import partial
 from itertools import chain
-
-import httpx
-from webob.exc import HTTPOk
 
 from nagare.services.router import route_for
 from nagare.services.logging import log
@@ -52,32 +51,41 @@ class MCPApp(RESTApp):
         self.timeout = timeout
         self.services = services_service
 
+        self.lock = threading.Lock()
+        self.channels = {}
         self.capabilities = Plugins().load_plugins('capabilities', entry_points='nagare.mcp.capabilities')
 
         for capability in self.capabilities.values():
             for name, f in capability.entries:
                 setattr(self, name, f)
 
-    def send_data(self, channel, content_type, event_type, data):
-        httpx.post(
-            self.send_url.format(channel),
-            headers={'Content-type': content_type, 'charset': 'utf-8', 'X-EventSource-Event': event_type},
-            content=data,
-            timeout=self.timeout,
-        )
+    def handle_request(self, chain, response, start_response, **params):
+        response.start_response = start_response
 
-    def _send_json(self, channel, response_id, json_data):
-        self.send_data(channel, 'application/json-rpc', 'message', json_data)
+        return super().handle_request(chain, response=response, start_response=start_response, **params)
+
+    def create_channel(self):
+        channel_id = str(uuid.uuid4())
+        with self.lock:
+            self.channels[channel_id] = channel = queue.Queue()
+
+        return channel_id, channel
+
+    def delete_channel(self, channel_id):
+        with self.lock:
+            self.channels.pop(channel_id, None)
+
+    def send_data(self, channel, data, event_type='message'):
+        self.channels[channel].put((event_type, data))
 
     def send_json(self, channel, response_id, result):
-        self._send_json(channel, response_id, json.dumps({'jsonrpc': '2.0', 'id': response_id, 'result': result}))
+        self.send_data(channel, [json.dumps({'jsonrpc': '2.0', 'id': response_id, 'result': result}).encode('utf-8')])
 
     def stream_json(self, channel, response_id, result, stream, binary_stream=False):
         json_prefix, json_suffix = json.dumps({'jsonrpc': '2.0', 'id': response_id, 'result': result}).split('{stream}')
 
-        self._send_json(
+        self.send_data(
             channel,
-            response_id,
             chain(
                 [json_prefix.encode('utf-8')],
                 map(b64encode, iter(partial(stream.read, CHUNK_SIZE), b''))
@@ -109,26 +117,48 @@ class MCPApp(RESTApp):
         )
 
 
-@route_for(MCPApp, '/sse')
+@route_for(MCPApp)
 def create_channel(self, url, method, request, response):
-    raise HTTPOk(headers={'X-Accel-Redirect': '/sub/{}'.format(uuid.uuid4()), 'X-Accel-Buffering': 'no'})
+    channel_id, channel = self.create_channel()
+
+    self.send_data(channel_id, [(request.create_redirect_url() + channel_id).encode('utf-8')], 'endpoint')
+
+    send = response.start_response('200 Ok', [('Content-Type', 'text/event-stream'), ('Cache-Control', 'no-cache')])
+
+    id_ = 0
+    while True:
+        try:
+            type_, data = channel.get(timeout=2)
+        except queue.Empty:
+            type_ = 'message'
+            data = [json.dumps({'jsonrpc': '2.0', 'id': str(id_), 'method': 'ping'}).encode('utf-8')]
+
+        try:
+            send(f'id: {id_}\nevent: {type_}\ndata: '.encode('utf-8'))
+            for chunk in data:
+                send(chunk)
+            send(b'\n\n')
+
+            getattr(data, 'close', lambda: None)()
+        except Exception:
+            self.delete_channel(channel_id)
+            break
+
+        id_ += 1
+
+    return []
 
 
-@route_for(MCPApp, '/_sub/{channel:[a-f0-9-]+}')
-def subscribe(self, url, method, request, response, channel):
-    self.send_data(channel, 'text/plain', 'endpoint', self.receive_url.format(channel))
-
-
-@route_for(MCPApp, '/rpc/{channel:[a-f0-9-]+}', 'POST')
+@route_for(MCPApp, '{channel:[a-f0-9-]+}', 'POST')
 def handle_json_rpc(self, url, method, request, response, channel):
     request = request.json_body
-    method = request['method']
+    method = request.get('method', '')
     params = request.get('params', {})
 
     log.debug("JSON-RPC: Calling method '%s' with %r", method, params)
 
     tool, _, method = (method.replace('.', '/') + '_rpc').partition('/')
-    f = getattr(self.capabilities[tool], method, None) if method else getattr(self, tool, None)
+    f = getattr(self.capabilities.get(tool), method, None) if method else getattr(self, tool, None)
     if f is not None:
         self.services(f, self, channel, request['id'], **params)
 

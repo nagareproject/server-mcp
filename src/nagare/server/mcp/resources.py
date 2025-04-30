@@ -63,24 +63,20 @@ class Resources(Plugin, dict):
                 },
             )
         else:
-            try:
-                is_binary_stream = 'b' in getattr(data, 'mode', 'b')
+            is_binary_stream = 'b' in getattr(data, 'mode', 'b')
 
-                app.stream_json(
-                    channel,
-                    request_id,
-                    {
-                        'contents': [
-                            {
-                                'uri': uri,
-                                'mimeType': mime_type
-                                or ('application/octet-stream' if is_binary_stream else 'text/plain'),
-                                ('blob' if is_binary_stream else 'text'): '{stream}',
-                            },
-                        ],
-                    },
-                    data,
-                    is_binary_stream,
-                )
-            finally:
-                getattr(data, 'close', lambda: None)()
+            app.stream_json(
+                channel,
+                request_id,
+                {
+                    'contents': [
+                        {
+                            'uri': uri,
+                            'mimeType': mime_type or ('application/octet-stream' if is_binary_stream else 'text/plain'),
+                            ('blob' if is_binary_stream else 'text'): '{stream}',
+                        },
+                    ],
+                },
+                data,
+                is_binary_stream,
+            )

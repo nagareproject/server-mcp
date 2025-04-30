@@ -4,63 +4,9 @@ Nagare Model Context Protocol server
 
 Features:
 
-  - Currently only for tools and (direct) resources
+  - Currently only for tools (with services injection) and (direct) resources
   - Currently only on SSE protocol (not stdio nor websocket)
   - Admin commands for tools invocations and resources fetches available
-
-Reverse proxy
-=============
-
-To serve SSE, a ``nginx`` with ``nchan`` module must be set as a reverse proxy. With configuration:
-
-.. code::
-
-    ...
-    worker_processes  20;
-
-    events {
-        worker_connections  1024;
-    }
-
-    http {
-        server {
-            listen       9000;
-            server_name  localhost;
-
-            location ~ /sub/([a-f0-9-]+)$ {
-                internal;
-                nchan_subscriber;
-
-                nchan_channel_id $1;
-                nchan_subscribe_request /_sub/$nchan_channel_id;
-                nchan_subscriber_first_message newest;
-            }
-
-            location ~ /_sub/([a-f0-9-]+)$ {
-                internal;
-
-                # Nagare MCP server url
-                proxy_pass http://127.0.0.1:8080;
-            }
-
-            location / {
-                # Nagare MCP server url
-                proxy_pass http://127.0.0.1:8080;
-            }
-        }
-
-        server {
-            listen      127.0.0.1:9001;
-            server_name localhost;
-
-            location ~ /pub/([a-f0-9-]+)$ {
-                nchan_publisher;
-
-                nchan_channel_id $1;
-                nchan_store_messages off;            }
-        }
-    }
-    ...
 
 MCP server example
 ==================

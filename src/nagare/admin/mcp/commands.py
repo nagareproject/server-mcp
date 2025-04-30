@@ -63,7 +63,7 @@ class Command(admin.Command):
 
         event = self.receive_event(events)
         if event.event == 'endpoint':
-            self.endpoint = 'http://localhost:9000' + event.data
+            self.endpoint = event.data
 
         return events
 
