@@ -42,7 +42,7 @@ class Describe(Command):
     DESC = 'Describe a resource'
 
     def set_arguments(self, parser):
-        parser.add_argument('-n', default=0)
+        parser.add_argument('-n', type=int, default=0)
         parser.add_argument('uri')
 
         super().set_arguments(parser)
@@ -50,12 +50,13 @@ class Describe(Command):
     def run(self, url, uri, n):
         events, _ = self.initialize(url)
 
-        content = self.send(events, 'resources/read', uri=uri)['contents'][n]
+        contents = self.send(events, 'resources/read', uri=uri)['contents']
+        content = contents[n]
         blob = content.pop('blob', None)
         data = b64decode(blob) if blob is not None else content['text']
         content.pop('text', None)
 
-        pprint(content | {'length': len(data)})
+        pprint(content | {'contents': len(contents), 'length': len(data)})
 
         return 0
 
@@ -64,7 +65,7 @@ class Read(Command):
     DESC = 'Fetch a resource'
 
     def set_arguments(self, parser):
-        parser.add_argument('-n', default=0)
+        parser.add_argument('-n', type=int, default=0)
         parser.add_argument('uri')
 
         super().set_arguments(parser)

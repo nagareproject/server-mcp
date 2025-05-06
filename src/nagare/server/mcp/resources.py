@@ -7,7 +7,8 @@
 # this distribution.
 # --
 
-from base64 import b64encode
+import io
+import types
 
 from nagare.services.plugin import Plugin
 
@@ -21,8 +22,8 @@ class Resources(Plugin, dict):
     def infos(self):
         return {'subscribe': False, 'listChanged': False} if self else {}
 
-    def register_direct_resource(self, f, uri, name, description=None, mime_type=None):
-        self[uri] = (f, name, description, mime_type)
+    def register_direct_resource(self, f, uri, name=None, mime_type='text/plain', description=None):
+        self[uri] = (f, name or uri, description, mime_type)
 
     def list_rpc(self, app, channel, request_id, **params):
         resources = []
@@ -42,41 +43,16 @@ class Resources(Plugin, dict):
         f, name, description, mime_type = self[uri]
         data = services_service(f, uri, name)
 
-        if isinstance(data, str):
-            app.send_json(
-                channel,
-                request_id,
-                {'contents': [{'uri': uri, 'mimeType': mime_type or 'text/plain', 'text': data}]},
-            )
-        elif isinstance(data, bytes):
-            app.send_json(
-                channel,
-                request_id,
-                {
-                    'contents': [
-                        {
-                            'uri': uri,
-                            'mimeType': mime_type or 'application/octet-stream',
-                            'blob': b64encode(data).decode('ascii'),
-                        },
-                    ],
-                },
-            )
-        else:
-            is_binary_stream = 'b' in getattr(data, 'mode', 'b')
+        if not isinstance(data, (list, tuple, types.GeneratorType)):
+            data = [data]
 
-            app.stream_json(
-                channel,
-                request_id,
-                {
-                    'contents': [
-                        {
-                            'uri': uri,
-                            'mimeType': mime_type or ('application/octet-stream' if is_binary_stream else 'text/plain'),
-                            ('blob' if is_binary_stream else 'text'): '{stream}',
-                        },
-                    ],
-                },
-                data,
-                is_binary_stream,
-            )
+        streams = []
+        for stream in data:
+            if isinstance(stream, str):
+                stream = io.StringIO(stream)
+            elif isinstance(stream, bytes):
+                stream = io.BytesIO(stream)
+
+            streams.append((uri, mime_type, stream))
+
+        app.stream_json(channel, request_id, streams)
