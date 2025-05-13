@@ -8,27 +8,29 @@
 # --
 
 import io
+import re
 import types
+from operator import itemgetter
 
 from nagare.services.plugin import Plugin
 
 
-class Resources(Plugin, dict):
+class Resources(Plugin, list):
     @property
     def entries(self):
-        return [('register_direct_resource', self.register_direct_resource)]
+        return [('register_resource', self.register_resource)]
 
     @property
     def infos(self):
         return {'subscribe': False, 'listChanged': False} if self else {}
 
-    def register_direct_resource(self, f, uri, name=None, mime_type='text/plain', description=None):
-        self[uri] = (f, name or uri, description, mime_type)
+    def register_resource(self, f, uri, name=None, mime_type='text/plain', description=None):
+        self.append((re.compile(re.sub('{(.+?)}', r'(?P<\1>.+?)', uri)), (f, uri, name, mime_type, description)))
 
     def list_rpc(self, app, channel, request_id, **params):
         resources = []
 
-        for uri, (_, name, description, mime_type) in sorted(self.items()):
+        for reg, (_, uri, name, mime_type, description) in self:
             resource = {'uri': uri, 'name': name}
             if description is not None:
                 resource['description'] = description
@@ -40,9 +42,12 @@ class Resources(Plugin, dict):
         app.send_json(channel, request_id, {'resources': resources})
 
     def read_rpc(self, app, channel, request_id, uri, services_service, **params):
-        f, name, description, mime_type = self[uri]
-        data = services_service(f, uri, name)
+        matching_resources = filter(itemgetter(0), ((reg.fullmatch(uri), params) for reg, params in self))
+        match, (f, _, name, mime_type, description) = next(matching_resources, (None, (None,) * 5))
+        if match is None:
+            return
 
+        data = services_service(f, uri, name, **match.groupdict())
         if not isinstance(data, (list, tuple, types.GeneratorType)):
             data = [data]
 

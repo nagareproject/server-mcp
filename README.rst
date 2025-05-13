@@ -4,7 +4,9 @@ Nagare Model Context Protocol server
 
 Features:
 
-  - Currently only for tools (with services injection) and (direct) resources
+  - Currently only for:
+    - tools (with services injection)
+    - resource (direct and template)
   - Currently only on SSE protocol (not stdio nor websocket)
   - Admin commands for tools invocations and resources fetches available
 
@@ -22,10 +24,11 @@ MCP server example
 
             self.register_tool(add)
 
-            self.register_direct_resource(resource1, 'examples://r1', 'r1')
-            self.register_direct_resource(resource2, 'examples://r2', 'r2')
-            self.register_direct_resource(resource3, 'examples://r3', 'r3', mime_type='text/html')
-            self.register_direct_resource(resource4, 'examples://r4', 'r4', mime_type='image/jpeg')
+            self.register_resource(resource1, 'examples://r1', 'r1')
+            self.register_resource(resource2, 'examples://r2', 'r2')
+            self.register_resource(resource3, 'examples://r3', 'r3', mime_type='text/html')
+            self.register_resource(resource4, 'examples://r4', 'r4', mime_type='image/jpeg')
+            self.register_resource(resource5, 'greeting://hello/{name}', 'hello')
 
 
     def add(a: int, b: int) -> int:
@@ -48,6 +51,10 @@ MCP server example
         # Binary stream resource
         return open('/tmp/logo.jpeg', 'rb')
 
+    def resource4(uri, name):
+        # Multiple binary stream resources
+        return open('/tmp/logo1.jpeg', 'rb'), open('/tmp/logo2.jpeg', 'rb')
+
 Admin commands
 ==============
 
@@ -61,6 +68,6 @@ Admin commands
 
     nagare resources list http://127.0.0.1:9000/sse
 
-    nagare resources describe <uri> http://127.0.0.1:9000/sse
+    nagare resources describe <uri> [-n <resource_index>] http://127.0.0.1:9000/sse
 
-    nagare resources read <uri> http://127.0.0.1:9000/sse
+    nagare resources read <uri> [-n <resource_index>] http://127.0.0.1:9000/sse

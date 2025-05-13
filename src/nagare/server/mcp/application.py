@@ -226,7 +226,9 @@ class MCPApp(RESTApp):
             {
                 'protocolVersion': '2024-11-05',
                 'serverInfo': {'name': self.server_name, 'version': self.version},
-                'capabilities': {name: capability.infos for name, capability in self.capabilities.items()},
+                'capabilities': {
+                    name: capability.infos for name, capability in self.capabilities.items() if capability
+                },
             },
         )
 
@@ -354,8 +356,6 @@ def handle_json_rpc(self, url, method, request, response, channel_id):
     f = getattr(self.capabilities.get(tool), method, None) if method else getattr(self, tool, None)
     if f is not None:
         self.services(f, self, channel_id, request['id'], **params)
-
-    response.status_code = 202
 
     # Send '202 Accepted': Acknowledges receipt, processing happens asynchronously.
     response.status_code = 202
