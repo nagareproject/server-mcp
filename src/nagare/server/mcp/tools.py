@@ -16,6 +16,10 @@ from nagare.services.logging import log
 class Tools(Plugin, dict):
     CONVERTER = {inspect.Parameter.empty: 'object', int: 'integer', bool: 'boolean', float: 'number', str: 'string'}
 
+    def __init__(self, name, dist, **config):
+        super().__init__(name, dist, **config)
+        self.rpc_exports = {'list': self.list, 'call': self.call}
+
     @property
     def entries(self):
         return [('register_tool', self.register)]
@@ -52,14 +56,14 @@ class Tools(Plugin, dict):
             },
         )
 
-    def list_rpc(self, app, channel, request_id, **params):
+    def list(self, app, channel, request_id, **params):
         app.send_json(
             channel,
             request_id,
             {'tools': [{'name': name} | meta for name, (_, meta) in sorted(self.items())]},
         )
 
-    def call_rpc(self, app, channel, request_id, name, arguments, services_service, **params):
+    def call(self, app, channel, request_id, name, arguments, services_service, **params):
         log.debug("Calling tool '%s' with %r", name, arguments)
 
         f = self[name][0]

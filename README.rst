@@ -6,7 +6,7 @@ Features:
 
   - Currently only for:
     - tools (with services injection)
-    - resource (direct and template)
+    - resources (direct and template)
   - Currently only on SSE protocol (not stdio nor websocket)
   - Admin commands for tools invocations and resources fetches available
 

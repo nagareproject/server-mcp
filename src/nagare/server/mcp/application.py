@@ -12,7 +12,7 @@ import uuid
 import queue
 import threading
 from base64 import b64encode
-from functools import partial
+from functools import reduce, partial
 
 from nagare.services.router import route_for
 from nagare.services.logging import log
@@ -73,6 +73,9 @@ class MCPApp(RESTApp):
         for capability in self.capabilities.values():
             for name, f in capability.entries:
                 setattr(self, name, f)
+
+        self.rpc_exports = {name: capability.rpc_exports for name, capability in self.capabilities.items()}
+        self.rpc_exports['initialize'] = self.initialize_rpc
 
     def handle_request(self, chain, response, start_response, **params):
         """Base request handling.
@@ -352,9 +355,8 @@ def handle_json_rpc(self, url, method, request, response, channel_id):
 
     log.debug("JSON-RPC: Calling method '%s' with %r", method, params)
 
-    tool, _, method = (method.replace('.', '/') + '_rpc').partition('/')
-    f = getattr(self.capabilities.get(tool), method, None) if method else getattr(self, tool, None)
-    if f is not None:
+    f = reduce(lambda d, name: d.get(name, {}), method.replace('.', '/').split('/'), self.rpc_exports)
+    if callable(f):
         self.services(f, self, channel_id, request['id'], **params)
 
     # Send '202 Accepted': Acknowledges receipt, processing happens asynchronously.
