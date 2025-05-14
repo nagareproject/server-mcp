@@ -77,6 +77,7 @@ class MCPApp(RESTApp):
         self.rpc_exports = {name: capability.rpc_exports for name, capability in self.capabilities.items()} | {
             'initialize': self.initialize,
             'ping': self.ping,
+            'completion': {'complete': self.complete},
         }
 
     def handle_request(self, chain, response, start_response, **params):
@@ -213,6 +214,12 @@ class MCPApp(RESTApp):
 
     # --- JSON-RPC Method Handlers ---
 
+    def invoke(self, method_names, *args, services_service, **kw):
+        # Follow the `rpc_exports` dictionnaries hierarchy to find the target function
+        f = reduce(lambda d, name: d.get(name, {}), method_names, self.rpc_exports)
+        if callable(f):
+            self.services(f, self, *args, **kw)
+
     @staticmethod
     def initialize(self, channel_id, request_id, **params):
         """Handles the 'initialize' JSON-RPC request from the client.
@@ -240,6 +247,12 @@ class MCPApp(RESTApp):
     @staticmethod
     def ping(self, channel_id, request_id, **params):
         self.send_json(channel_id, request_id, {})
+
+    @staticmethod
+    def complete(self, *args, argument, ref, services_service, **params):
+        services_service(
+            self.invoke, ((ref['type'].removeprefix('ref/')) + 's', 'complete'), *args, argument, ref, **params
+        )
 
 
 # --- Route Handlers ---
@@ -334,9 +347,7 @@ def handle_json_rpc(self, url, method, request, response, channel_id):
     This function:
     1. Extracts the method name, parameters, and request ID from the JSON-RPC body
     2. Determines the target function based on the method name
-    3. If a target function is found, it's invoked using  dependency injection
-       with the application instance, channel ID, request ID, and parameters.
-    4. Sends a 202 Accepted response immediately, as the actual result will be
+    3. Sends a 202 Accepted response immediately, as the actual result will be
        sent asynchronously via the SSE channel.
 
     Args:
@@ -357,12 +368,9 @@ def handle_json_rpc(self, url, method, request, response, channel_id):
 
     log.debug("JSON-RPC: Calling method '%s' with %r", method, params)
 
-    # 2. Follow the `rpc_exports` dictionnaries hierarchy to find the target function
-    f = reduce(lambda d, name: d.get(name, {}), method.replace('.', '/').split('/'), self.rpc_exports)
-    if callable(f):
-        # 3. Invoke the function, with services injection
-        self.services(f, self, channel_id, request['id'], **params)
+    # 2. Find the function and invoke it with dependencies injection
+    self.services(self.invoke, method.replace('.', '/').split('/'), channel_id, request['id'], **params)
 
-    # 4. Send '202 Accepted': Acknowledges receipt, processing happens asynchronously.
+    # 3. Send '202 Accepted': Acknowledges receipt, processing happens asynchronously.
     response.status_code = 202
     return ''

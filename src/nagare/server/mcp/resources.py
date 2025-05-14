@@ -19,7 +19,12 @@ class Resources(Plugin):
     def __init__(self, name, dist, **config):
         super().__init__(name, dist, **config)
 
-        self.rpc_exports = {'list': self.list_concretes, 'read': self.read, 'templates': {'list': self.list_templates}}
+        self.rpc_exports = {
+            'list': self.list_concretes,
+            'templates': {'list': self.list_templates},
+            'read': self.read,
+            'complete': self.complete,
+        }
 
         self.concrete_resources = {}
         self.template_resources = []
@@ -66,6 +71,9 @@ class Resources(Plugin):
             resources.append(resource)
 
         app.send_json(channel, request_id, {'resourceTemplates': resources})
+
+    def complete(self, app, channel, request_id, argument, ref, **params):
+        app.send_json(channel, request_id, {'completion': {'values': []}})
 
     def read(self, app, channel, request_id, uri, services_service, **params):
         f, name, mime_type, description = self.concrete_resources.get(uri, (None,) * 4)
