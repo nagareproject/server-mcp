@@ -7,15 +7,14 @@
 # this distribution.
 # --
 
-import inspect
 
 from nagare.services.plugin import Plugin
 from nagare.services.logging import log
 
+from .utils import inspect_function
+
 
 class Tools(Plugin, dict):
-    CONVERTER = {inspect.Parameter.empty: 'object', int: 'integer', bool: 'boolean', float: 'number', str: 'string'}
-
     def __init__(self, name, dist, **config):
         super().__init__(name, dist, **config)
         self.rpc_exports = {'list': self.list, 'call': self.call}
@@ -29,44 +28,32 @@ class Tools(Plugin, dict):
         return {'listChanged': False} if self else {}
 
     def register(self, f, func_name=None):
-        sig = inspect.signature(f)
-
-        params = {}
-        required = set()
-        for name, param in sig.parameters.items():
-            if name != 'self':
-                has_default = param.default is not inspect.Parameter.empty
-                if not has_default:
-                    required.add(name)
-
-                params[name] = {'type': self.CONVERTER[param.annotation]}
-                if has_default:
-                    params[name]['default'] = param.default
-
-        self[func_name or f.__name__] = (
-            f,
-            {
-                'description': f.__doc__ or '',
-                'inputSchema': {
-                    'properties': params,
-                    'required': tuple(required),
-                    'title': f.__doc__ or '',
-                    'type': self.CONVERTER[sig.return_annotation],
-                },
-            },
-        )
+        self[func_name or f.__name__] = f
 
     def list(self, app, channel, request_id, **params):
-        app.send_json(
-            channel,
-            request_id,
-            {'tools': [{'name': name} | meta for name, (_, meta) in sorted(self.items())]},
-        )
+        tools = []
+        for name, f in sorted(self.items()):
+            params, required, return_type = inspect_function(f)
+
+            tools.append(
+                {
+                    'name': name,
+                    'description': f.__doc__ or '',
+                    'inputSchema': {
+                        'properties': params,
+                        'required': tuple(required),
+                        'title': f.__doc__ or '',
+                        'type': return_type,
+                    },
+                }
+            )
+
+        app.send_json(channel, request_id, {'tools': tools})
 
     def call(self, app, channel, request_id, name, arguments, services_service, **params):
         log.debug("Calling tool '%s' with %r", name, arguments)
 
-        f = self[name][0]
+        f = self[name]
         r = services_service(f, **arguments)
 
         app.send_json(channel, request_id, {'isError': False, 'content': [{'type': 'text', 'text': str(r)}]})

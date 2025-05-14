@@ -218,7 +218,7 @@ class MCPApp(RESTApp):
         # Follow the `rpc_exports` dictionnaries hierarchy to find the target function
         f = reduce(lambda d, name: d.get(name, {}), method_names, self.rpc_exports)
         if callable(f):
-            self.services(f, self, *args, **kw)
+            services_service(f, self, *args, **kw)
 
     @staticmethod
     def initialize(self, channel_id, request_id, **params):
@@ -238,9 +238,8 @@ class MCPApp(RESTApp):
             {
                 'protocolVersion': '2024-11-05',
                 'serverInfo': {'name': self.server_name, 'version': self.version},
-                'capabilities': {
-                    name: capability.infos for name, capability in self.capabilities.items() if capability
-                },
+                'capabilities': {'completion': {}}
+                | {name: capability.infos for name, capability in self.capabilities.items() if capability},
             },
         )
 
@@ -304,7 +303,7 @@ def create_channel(self, url, method, request, response):
         except queue.Empty:
             # 6. If timeout occurs (no data), send a ping message.
             type_ = 'message'  # Pings are sent as standard messages.
-            data = json.dumps({'jsonrpc': '2.0', 'id': None, 'method': 'ping'}).encode('utf-8')
+            data = json.dumps({'jsonrpc': '2.0', 'method': 'ping'}).encode('utf-8')
 
         # 5. Send the retrieved data (or ping) as an SSE event.
         try:
@@ -369,7 +368,7 @@ def handle_json_rpc(self, url, method, request, response, channel_id):
     log.debug("JSON-RPC: Calling method '%s' with %r", method, params)
 
     # 2. Find the function and invoke it with dependencies injection
-    self.services(self.invoke, method.replace('.', '/').split('/'), channel_id, request['id'], **params)
+    self.services(self.invoke, method.replace('.', '/').split('/'), channel_id, request.get('id'), **params)
 
     # 3. Send '202 Accepted': Acknowledges receipt, processing happens asynchronously.
     response.status_code = 202

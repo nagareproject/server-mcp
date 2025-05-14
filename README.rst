@@ -30,10 +30,17 @@ MCP server example
             self.register_resource(resource4, 'examples://r4', 'r4', mime_type='image/jpeg')
             self.register_resource(resource5, 'greeting://hello/{name}', 'hello')
 
+            self.register_prompt(prompt1, 'prompt1')
+
+    # Tools
+    # -----
 
     def add(a: int, b: int) -> int:
         """Add two numbers."""
         return a + b
+
+    # Resources
+    # ---------
 
     def resource1(uri, name):
         # In-memory text resource
@@ -55,6 +62,12 @@ MCP server example
         # Multiple binary stream resources
         return open('/tmp/logo1.jpeg', 'rb'), open('/tmp/logo2.jpeg', 'rb')
 
+    # Prompts
+    # -------
+
+    def prompt1(code, language='unknown'):
+        return f'Explain how this {language} code works:\n\n{code}'
+
 Admin commands
 ==============
 
@@ -71,3 +84,7 @@ Admin commands
     nagare resources describe <uri> [-n <resource_index>] http://127.0.0.1:9000/sse
 
     nagare resources read <uri> [-n <resource_index>] http://127.0.0.1:9000/sse
+
+    nagare mcp prompts list http://127.0.0.1:9000/sse
+
+    nagare mcp prompts get prompt1 -p language=python -p code='def fibo(): ...' http://127.0.0.1:9000/sse

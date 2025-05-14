@@ -6,12 +6,12 @@
 # the file LICENSE.txt, which you should have received as part of
 # this distribution.
 # --
-from ast import Expr, Name, Module, Return, Constant, FunctionDef, arg, arguments, fix_missing_locations
 from pydoc import plaintext
 from pprint import pprint
 
 from nagare.admin import admin
 
+from .utils import create_prototype
 from .commands import Command
 
 
@@ -26,27 +26,9 @@ class Tool(Command):
 
     CONVERTER = {'integer': int, 'boolean': bool, 'number': float, 'string': str}
 
-    def create_prototype(self, name, description, return_type, params, required):
-        func = FunctionDef(
-            name,
-            arguments(
-                kwonlyargs=[arg(name, annotation=Name(self.CONVERTER[type_].__name__)) for name, type_ in params],
-                kw_defaults=[None if name in required else Constant(None) for name, _ in params],
-            ),
-            [
-                Expr(Constant(description)),
-                Return(Constant(None)),
-            ],
-        )
-
-        globals_ = {}
-        exec(compile(fix_missing_locations(Module([func])), '', 'exec'), globals_)  # noqa: S102
-
-        return globals_[name]
-
     def create_tools(self, events):
         return {
-            tool['name']: self.create_prototype(
+            tool['name']: create_prototype(
                 tool['name'],
                 tool['inputSchema']['title'],
                 tool['inputSchema']['type'],
@@ -62,11 +44,10 @@ class List(Tool):
 
     def run(self, url):
         events, _ = self.initialize(url)
-        tools = self.create_tools(events)
 
         print('Available tools:\n')
-        for _, func in sorted(tools.items()):
-            print(' -', plaintext.document(func))
+        for proto in sorted(self.create_tools(events).values()):
+            print(' -', plaintext.document(proto))
 
         return 0
 
