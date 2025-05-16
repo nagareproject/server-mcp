@@ -5,10 +5,12 @@ Nagare Model Context Protocol server
 Features:
 
   - Currently only for:
-    - tools (with services injection)
     - resources (direct and template)
+    - prompts
+    - tools (with services injection)
+    - roots
   - Currently only on SSE protocol (not stdio nor websocket)
-  - Admin commands for tools invocations and resources fetches available
+  - Admin commands for resources, prompts, tools and roots discovery and invocation
 
 MCP server example
 ==================
@@ -79,12 +81,16 @@ Admin commands
 
     nagare mcp tools call add -p a=10 -p b=20 http://127.0.0.1:9000/sse
 
-    nagare resources list http://127.0.0.1:9000/sse
+    nagare mcp resources list http://127.0.0.1:9000/sse
 
-    nagare resources describe <uri> [-n <resource_index>] http://127.0.0.1:9000/sse
+    nagare mcp resources describe <uri> [-n <resource_index>] http://127.0.0.1:9000/sse
 
-    nagare resources read <uri> [-n <resource_index>] http://127.0.0.1:9000/sse
+    nagare mcp resources read <uri> [-n <resource_index>] http://127.0.0.1:9000/sse
 
     nagare mcp prompts list http://127.0.0.1:9000/sse
 
     nagare mcp prompts get prompt1 -p language=python -p code='def fibo(): ...' http://127.0.0.1:9000/sse
+
+.. note::
+
+    Each `mcp` subcommands accepts several `--root <name> <uri>` arguments to define roots

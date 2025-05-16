@@ -7,7 +7,8 @@
 # this distribution.
 # --
 from pydoc import plaintext
-from pprint import pprint
+
+import yaml
 
 from nagare.admin import admin
 
@@ -20,7 +21,7 @@ class Prompts(admin.Commands):
 
 
 class Prompt(Command):
-    def create_prompts(self, events):
+    def create_prompts(self):
         return {
             prompt['name']: create_prototype(
                 prompt['name'],
@@ -29,18 +30,16 @@ class Prompt(Command):
                 [(argument['name'], 'string') for argument in prompt['arguments']],
                 {argument['name'] for argument in prompt['arguments'] if argument['required']},
             )
-            for prompt in self.send(events, 'prompts/list')['prompts']
+            for prompt in self.send('prompts/list')['prompts']
         }
 
 
 class List(Prompt):
     DESC = 'List the prompts'
 
-    def run(self, url):
-        events, _ = self.initialize(url)
-
+    def run(self):
         print('Available prompts:\n')
-        for proto in sorted(self.create_prompts(events).values()):
+        for proto in sorted(self.create_prompts().values()):
             print(' -', plaintext.document(proto))
 
         return 0
@@ -55,9 +54,8 @@ class Get(Prompt):
 
         super().set_arguments(parser)
 
-    def run(self, url, prompt, params):
-        events, _ = self.initialize(url)
-        prompts = self.create_prompts(events)
+    def run(self, prompt, params):
+        prompts = self.create_prompts()
 
         func = prompts.get(prompt)
         if func is None:
@@ -75,7 +73,7 @@ class Get(Prompt):
             print('Error:', e)
             return -1
 
-        result = self.send(events, 'prompts/get', name=prompt, arguments=args)
-        pprint(result['messages'])
+        result = self.send('prompts/get', name=prompt, arguments=args)
+        print(yaml.dump(result['messages']))
 
         return 0

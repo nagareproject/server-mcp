@@ -7,10 +7,12 @@
 # this distribution.
 # --
 import json
-from queue import Queue
-from pprint import pprint
+import queue
+import argparse
+from functools import reduce
 from threading import Thread
 
+import yaml
 import httpx
 import sseclient
 
@@ -26,65 +28,85 @@ class Command(admin.Command):
 
     def __init__(self, name, dist, **config):
         super().__init__(name, dist, **config)
+
+        self.events = queue.Queue()
         self.endpoint = None
+        self.roots = []
+
+        self.rpc_exports = {'roots': {'list': self.list_roots}}
 
     @classmethod
     def _create_services(cls, *args, **kw):
         return cls.SERVICES_FACTORY()
 
     def set_arguments(self, parser):
+        parser.add_argument('-r', '--root', nargs=2, dest='roots', action='append', metavar=('name', 'uri'))
         parser.add_argument('url')
+
+        parser.add_argument('-_', default=self.initialize, dest='next_method', help=argparse.SUPPRESS)
 
         super().set_arguments(parser)
 
-    @staticmethod
-    def receive_events(url, queue):
+    def receive_events(self, url):
         try:
             with httpx.stream('GET', url, headers={'Accept': 'text/event-stream'}) as stream:
                 for event in sseclient.SSEClient(stream.iter_bytes()).events():
-                    queue.put(event)
+                    self.events.put(event)
         except Exception as exc:
-            queue.put(exc)
+            self.events.put(exc)
 
-    @staticmethod
-    def receive_event(queue):
-        event = queue.get()
+    def receive_event(self):
+        event = self.events.get()
         if isinstance(event, Exception):
             raise event
 
-        return event
+        if event.event != 'message':
+            return event.data
+
+        event = json.loads(event.data)
+        if method := event.get('method'):
+            f = reduce(lambda d, name: d.get(name, {}), method.split('/'), self.rpc_exports)
+            return f(event['id']) if callable(f) else None
+
+        return event['result']
 
     def start_events_listener(self, url):
-        events = Queue()
-
-        t = Thread(target=self.receive_events, args=[url, events])
+        t = Thread(target=self.receive_events, args=[url])
         t.daemon = True
         t.start()
 
-        event = self.receive_event(events)
-        if event.event == 'endpoint':
-            self.endpoint = event.data
-
-        return events
-
-    def send(self, events, method, **params):
-        data = {'jsonrpc': '2.0', 'id': 0, 'method': method, 'params': params}
-
+    def send_data(self, data):
         httpx.post(self.endpoint, json=data, timeout=5)
-        response = self.receive_event(events).data
 
-        return json.loads(response)['result']
+    def send(self, method, **params):
+        self.send_data({'jsonrpc': '2.0', 'id': 0, 'method': method, 'params': params})
+        return self.receive_event()
 
-    def initialize(self, url):
-        events = self.start_events_listener(url)
-        return events, self.send(events, 'initialize')
+    def initialize(self, roots, url, **arguments):
+        self.roots = roots or []
+
+        self.start_events_listener(url)
+        self.endpoint = self.receive_event()
+
+        self.server_info = self.send('initialize', capabilities={'roots': {'listChanged': False}})
+        self.send('notifications/initialized')
+
+        return self.run(**arguments)
+
+    def list_roots(self, request_id):
+        self.send_data(
+            {
+                'jsonrpc': '2.0',
+                'id': request_id,
+                'result': {'roots': [{'name:': name, 'uri': uri} for name, uri in self.roots]},
+            }
+        )
 
 
 class Info(Command):
     DESC = 'Server informations'
 
-    def run(self, url):
-        _, server_info = self.initialize(url)
-        pprint(server_info)
+    def run(self):
+        print(yaml.dump(self.server_info, indent=4))
 
         return 0

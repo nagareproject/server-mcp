@@ -8,7 +8,8 @@
 # --
 import sys
 from base64 import b64decode
-from pprint import pprint
+
+import yaml
 
 from nagare.admin import admin
 
@@ -22,11 +23,9 @@ class Resources(admin.Commands):
 class List(Command):
     DESC = 'List the resources'
 
-    def run(self, url):
-        events, _ = self.initialize(url)
-
+    def run(self):
         print('Available resources:\n')
-        for resource in self.send(events, 'resources/list')['resources']:
+        for resource in self.send('resources/list')['resources']:
             print(
                 ' -',
                 resource['uri'],
@@ -47,16 +46,14 @@ class Describe(Command):
 
         super().set_arguments(parser)
 
-    def run(self, url, uri, n):
-        events, _ = self.initialize(url)
-
-        contents = self.send(events, 'resources/read', uri=uri)['contents']
+    def run(self, uri, n):
+        contents = self.send('resources/read', uri=uri)['contents']
         content = contents[n - 1]
         blob = content.pop('blob', None)
         data = b64decode(blob) if blob is not None else content['text']
         content.pop('text', None)
 
-        pprint(content | {'contents': len(contents), 'length': len(data)})
+        print(yaml.dump(content | {'contents': len(contents), 'length': len(data)}))
 
         return 0
 
@@ -70,10 +67,8 @@ class Read(Command):
 
         super().set_arguments(parser)
 
-    def run(self, url, uri, n):
-        events, _ = self.initialize(url)
-
-        content = self.send(events, 'resources/read', uri=uri)['contents'][n - 1]
+    def run(self, uri, n):
+        content = self.send('resources/read', uri=uri)['contents'][n - 1]
         blob = content.get('blob')
         if blob is not None:
             sys.stdout.buffer.write(b64decode(blob))

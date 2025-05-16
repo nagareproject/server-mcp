@@ -59,6 +59,9 @@ class MCPApp(RESTApp):
         self.version = version or dist.version  # Use provided version or distribution version.
         self.ping_timeout = ping_timeout
         self.services = services_service
+        self.client_capabilities = {}  # Capabilities sent by the client
+        self.roots = set()  # Roots sent by the client
+        self.response_handler = None
 
         # A lock to ensure thread-safe access to the shared `channels` dictionary.
         self.lock = threading.Lock()
@@ -74,8 +77,10 @@ class MCPApp(RESTApp):
             for name, f in capability.entries:
                 setattr(self, name, f)
 
+        # RPC namespaces
         self.rpc_exports = {name: capability.rpc_exports for name, capability in self.capabilities.items()} | {
             'initialize': self.initialize,
+            'notifications': {'initialized': self.on_initialized, 'roots': {'list_changed': self.on_roots_changed}},
             'ping': self.ping,
             'completion': {'complete': self.complete},
         }
@@ -221,7 +226,7 @@ class MCPApp(RESTApp):
             services_service(f, self, *args, **kw)
 
     @staticmethod
-    def initialize(self, channel_id, request_id, **params):
+    def initialize(self, channel_id, request_id, capabilities, **params):
         """Handles the 'initialize' JSON-RPC request from the client.
 
         Responds with server information and the available capabilities.
@@ -230,18 +235,37 @@ class MCPApp(RESTApp):
             self (MCPApp): This application instance.
             channel_id (str): The SSE channel ID associated with the client.
             request_id (str | int): The ID of the 'initialize' request.
+            capabilities: client capabilities
             **params: Any parameters sent with the initialize request (ignored).
         """
+        self.client_capabilities = capabilities
+
         self.send_json(
             channel_id,
             request_id,
             {
                 'protocolVersion': '2024-11-05',
                 'serverInfo': {'name': self.server_name, 'version': self.version},
-                'capabilities': {'completion': {}}
+                'capabilities': {'completion': {}, 'roots': {}}
                 | {name: capability.infos for name, capability in self.capabilities.items() if capability},
             },
         )
+
+    def list_roots(self, channel_id):
+        self.response_handler = self.on_roots_received
+        self.send_data(channel_id, json.dumps({'jsonrpc': '2.0', 'id': 0, 'method': 'roots/list'}).encode('utf-8'))
+
+    def on_roots_received(self, roots):
+        self.roots = {root['uri'] for root in roots}
+
+    @staticmethod
+    def on_initialized(self, channel_id, _):
+        if 'roots' in self.client_capabilities:
+            self.list_roots(channel_id)
+
+    @staticmethod
+    def on_roots_changed(self, channel_id, _):
+        self.list_roots(channel_id)
 
     @staticmethod
     def ping(self, channel_id, request_id, **params):
@@ -362,14 +386,22 @@ def handle_json_rpc(self, url, method, request, response, channel_id):
     """
     # 1. Extract method name, parameters and ID.
     request = request.json_body
-    method = request.get('method', '')
-    params = request.get('params', {})
 
-    log.debug("JSON-RPC: Calling method '%s' with %r", method, params)
+    if error := request.get('error'):
+        print('ERROR FROM CLIENT', error)
+    elif 'result' in request:
+        self.response_handle, response_handler = None, self.response_handler
+        response_handler(**request['result'])
+    else:
+        method = request.get('method', '')
+        params = request.get('params', {})
 
-    # 2. Find the function and invoke it with dependencies injection
-    self.services(self.invoke, method.replace('.', '/').split('/'), channel_id, request.get('id'), **params)
+        log.debug("JSON-RPC: Calling method '%s' with %r", method, params)
 
-    # 3. Send '202 Accepted': Acknowledges receipt, processing happens asynchronously.
-    response.status_code = 202
+        # 2. Find the function and invoke it with dependencies injection
+        self.services(self.invoke, method.replace('.', '/').split('/'), channel_id, request.get('id'), **params)
+
+        # 3. Send '202 Accepted': Acknowledges receipt, processing happens asynchronously.
+        response.status_code = 202
+
     return ''

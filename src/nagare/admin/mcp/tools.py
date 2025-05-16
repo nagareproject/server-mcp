@@ -7,7 +7,8 @@
 # this distribution.
 # --
 from pydoc import plaintext
-from pprint import pprint
+
+import yaml
 
 from nagare.admin import admin
 
@@ -26,7 +27,7 @@ class Tool(Command):
 
     CONVERTER = {'integer': int, 'boolean': bool, 'number': float, 'string': str}
 
-    def create_tools(self, events):
+    def create_tools(self):
         return {
             tool['name']: create_prototype(
                 tool['name'],
@@ -35,18 +36,16 @@ class Tool(Command):
                 [(name, prop['type']) for name, prop in tool['inputSchema']['properties'].items()],
                 set(tool['inputSchema']['required']),
             )
-            for tool in self.send(events, 'tools/list')['tools']
+            for tool in self.send('tools/list')['tools']
         }
 
 
 class List(Tool):
     DESC = 'List the tools'
 
-    def run(self, url):
-        events, _ = self.initialize(url)
-
+    def run(self):
         print('Available tools:\n')
-        for proto in sorted(self.create_tools(events).values()):
+        for proto in sorted(self.create_tools().values()):
             print(' -', plaintext.document(proto))
 
         return 0
@@ -61,9 +60,8 @@ class Call(Tool):
 
         super().set_arguments(parser)
 
-    def run(self, url, method, params):
-        events, _ = self.initialize(url)
-        tools = self.create_tools(events)
+    def run(self, method, params):
+        tools = self.create_tools()
 
         func = tools.get(method)
         if func is None:
@@ -81,10 +79,10 @@ class Call(Tool):
             print('Error:', e)
             return -1
 
-        result = self.send(events, 'tools/call', name=method.replace('.', '/'), arguments=args)
+        result = self.send('tools/call', name=method.replace('.', '/'), arguments=args)
         if result['isError']:
             print('ERROR!')
         else:
-            pprint(result['content'])
+            print(yaml.dump(result['content']))
 
         return 0
