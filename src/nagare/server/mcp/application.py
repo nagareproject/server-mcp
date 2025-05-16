@@ -40,6 +40,17 @@ class MCPApp(RESTApp):
         'ping_timeout': 'integer(default=5)',
     }
 
+    LOGGING_LEVELS = {
+        'debug': 0,
+        'info': 1,
+        'notice': 2,
+        'warning': 3,
+        'error': 4,
+        'critical': 5,
+        'alert': 6,
+        'emergency': 7,
+    }
+
     def __init__(self, name, dist, server_name, version, ping_timeout, services_service, **config):
         """Initializes the MCP application.
 
@@ -59,6 +70,7 @@ class MCPApp(RESTApp):
         self.version = version or dist.version  # Use provided version or distribution version.
         self.ping_timeout = ping_timeout
         self.services = services_service
+        self.logging_level = self.LOGGING_LEVELS['error']
         self.client_capabilities = {}  # Capabilities sent by the client
         self.roots = set()  # Roots sent by the client
         self.response_handler = None
@@ -82,6 +94,7 @@ class MCPApp(RESTApp):
             'initialize': self.initialize,
             'notifications': {'initialized': self.on_initialized, 'roots': {'list_changed': self.on_roots_changed}},
             'ping': self.ping,
+            'logging': {'setLevel': self.set_logging_level},
             'completion': {'complete': self.complete},
         }
 
@@ -246,7 +259,7 @@ class MCPApp(RESTApp):
             {
                 'protocolVersion': '2024-11-05',
                 'serverInfo': {'name': self.server_name, 'version': self.version},
-                'capabilities': {'completion': {}, 'roots': {}}
+                'capabilities': {'roots': {}, 'completion': {}, 'logging': {}}
                 | {name: capability.infos for name, capability in self.capabilities.items() if capability},
             },
         )
@@ -266,6 +279,24 @@ class MCPApp(RESTApp):
     @staticmethod
     def on_roots_changed(self, channel_id, _):
         self.list_roots(channel_id)
+
+    @staticmethod
+    def set_logging_level(self, channel_id, request_id, level, **params):
+        self.logging_level = self.LOGGING_LEVELS[level]
+        self.send_json(channel_id, request_id, {})
+
+    def send_log(self, channel_id, logger, level, data):
+        if self.LOGGING_LEVELS[level] >= self.logging_level:
+            self.send_data(
+                channel_id,
+                json.dumps(
+                    {
+                        'jsonrpc': '2.0',
+                        'method': 'notifications/message',
+                        'params': {'level': level, 'logger': logger, 'data': data},
+                    }
+                ).encode('utf-8'),
+            )
 
     @staticmethod
     def ping(self, channel_id, request_id, **params):

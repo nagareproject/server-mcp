@@ -93,4 +93,4 @@ Admin commands
 
 .. note::
 
-    Each `mcp` subcommands accepts several `--root <name> <uri>` arguments to define roots
+    All ``mcp`` subcommands accepts several ``--root <name> <uri>`` arguments to define roots
