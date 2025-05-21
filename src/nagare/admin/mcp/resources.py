@@ -37,6 +37,27 @@ class List(Command):
         return 0
 
 
+class Templates(admin.Commands):
+    DESC = 'MCP resources templates subcommands'
+
+
+class TemplatesList(Command):
+    DESC = 'List the template resources'
+
+    def run(self):
+        print('Available template resources:\n')
+        for resource in self.send('resources/templates/list')['resourceTemplates']:
+            print(
+                ' -',
+                resource['uriTemplate'],
+                resource['name'],
+                resource.get('mimeType', ''),
+                resource.get('description', ''),
+            )
+
+        return 0
+
+
 class Describe(Command):
     DESC = 'Describe a resource'
 

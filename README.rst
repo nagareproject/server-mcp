@@ -4,13 +4,13 @@ Nagare Model Context Protocol server
 
 Features:
 
-  - Currently only for:
+  - Available capabilities::
     - resources (direct and template)
     - prompts
     - tools (with services injection)
     - roots
   - Currently only on SSE protocol (not stdio nor websocket)
-  - Admin commands for resources, prompts, tools and roots discovery and invocation
+  - Admin commands for discovery and invocation
 
 MCP server example
 ==================
@@ -93,4 +93,4 @@ Admin commands
 
 .. note::
 
-    All ``mcp`` subcommands accepts several ``--root <name> <uri>`` arguments to define roots
+    All ``mcp`` subcommands accept several ``--root <name> <uri>`` arguments to define roots

@@ -17,9 +17,14 @@ list = nagare.admin.mcp.tools:List
 call = nagare.admin.mcp.tools:Call
 
 [nagare.commands.mcp.resources]
+templates = nagare.admin.mcp.resources:Templates
+
 list = nagare.admin.mcp.resources:List
 describe = nagare.admin.mcp.resources:Describe
 read = nagare.admin.mcp.resources:Read
+
+[nagare.commands.mcp.resources.templates]
+list = nagare.admin.mcp.resources:TemplatesList
 
 [nagare.commands.mcp.prompts]
 list = nagare.admin.mcp.prompts:List

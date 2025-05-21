@@ -31,7 +31,7 @@ class Tool(Command):
         return {
             tool['name']: create_prototype(
                 tool['name'],
-                tool['inputSchema']['title'],
+                tool['description'],
                 tool['inputSchema']['type'],
                 [(name, prop['type']) for name, prop in tool['inputSchema']['properties'].items()],
                 set(tool['inputSchema']['required']),
@@ -45,7 +45,7 @@ class List(Tool):
 
     def run(self):
         print('Available tools:\n')
-        for proto in sorted(self.create_tools().values()):
+        for _, proto in sorted(self.create_tools().items()):
             print(' -', plaintext.document(proto))
 
         return 0

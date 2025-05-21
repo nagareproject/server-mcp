@@ -11,6 +11,7 @@ import queue
 import argparse
 from functools import reduce
 from threading import Thread
+from urllib.parse import urljoin
 
 import yaml
 import httpx
@@ -28,6 +29,8 @@ class Command(admin.Command):
 
     def __init__(self, name, dist, **config):
         super().__init__(name, dist, **config)
+
+        self.version = dist.version
 
         self.events = queue.Queue()
         self.endpoint = None
@@ -86,10 +89,17 @@ class Command(admin.Command):
         self.roots = roots or []
 
         self.start_events_listener(url)
-        self.endpoint = self.receive_event()
+        endpoint = self.receive_event()
+        self.endpoint = urljoin(url, endpoint)
 
-        self.server_info = self.send('initialize', capabilities={'roots': {'listChanged': False}})
-        self.send('notifications/initialized')
+        self.server_info = self.send(
+            'initialize',
+            protocolVersion='2024-11-05',
+            capabilities={'roots': {'listChanged': False}},
+            clientInfo={'name': 'NagareClient', 'version': self.version},
+        )
+
+        self.send_data({'jsonrpc': '2.0', 'method': 'notifications/initialized'})
 
         return self.run(**arguments)
 

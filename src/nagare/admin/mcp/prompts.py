@@ -39,7 +39,7 @@ class List(Prompt):
 
     def run(self):
         print('Available prompts:\n')
-        for proto in sorted(self.create_prompts().values()):
+        for _, proto in sorted(self.create_prompts().items()):
             print(' -', plaintext.document(proto))
 
         return 0
@@ -65,7 +65,7 @@ class Get(Prompt):
         try:
             args = {}
             for param in params or ():
-                name, value = param.split('=')
+                name, value = param.split('=', 1)
                 args[name] = func.__annotations__.get(name, lambda v: v)(value)
 
             func(**args)
