@@ -30,7 +30,7 @@ class Tools(Plugin, dict):
     def register(self, f, func_name=None):
         self[func_name or f.__name__] = f
 
-    def list(self, app, channel, request_id, **params):
+    def list(self, app, request_id, **params):
         tools = []
         for name, f in sorted(self.items()):
             params, required, return_type = inspect_function(f)
@@ -48,12 +48,12 @@ class Tools(Plugin, dict):
                 }
             )
 
-        app.send_json(channel, request_id, {'tools': tools})
+        return app.create_rpc_response(request_id, {'tools': tools})
 
-    def call(self, app, channel, request_id, name, arguments, services_service, **params):
+    def call(self, app, request_id, name, arguments, services_service, **params):
         log.debug("Calling tool '%s' with %r", name, arguments)
 
         f = self[name]
         r = services_service(f, **arguments)
 
-        app.send_json(channel, request_id, {'isError': False, 'content': [{'type': 'text', 'text': str(r)}]})
+        return app.create_rpc_response(request_id, {'isError': False, 'content': [{'type': 'text', 'text': str(r)}]})

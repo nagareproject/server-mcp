@@ -59,19 +59,24 @@ class Command(admin.Command):
             self.events.put(exc)
 
     def receive_event(self):
-        event = self.events.get()
-        if isinstance(event, Exception):
-            raise event
+        result = None
+        while result is None:
+            event = self.events.get()
+            if isinstance(event, Exception):
+                raise event
 
-        if event.event != 'message':
-            return event.data
+            if event.event != 'message':
+                result = event.data
+            else:
+                event = json.loads(event.data)
+                if method := event.get('method'):
+                    f = reduce(lambda d, name: d.get(name, {}), method.split('/'), self.rpc_exports)
+                    if callable(f):
+                        f(event['id'])
+                else:
+                    result = event['result']
 
-        event = json.loads(event.data)
-        if method := event.get('method'):
-            f = reduce(lambda d, name: d.get(name, {}), method.split('/'), self.rpc_exports)
-            return f(event['id']) if callable(f) else None
-
-        return event['result']
+        return result
 
     def start_events_listener(self, url):
         t = Thread(target=self.receive_events, args=[url])

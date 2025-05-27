@@ -4,13 +4,48 @@ Nagare Model Context Protocol server
 
 Features:
 
-  - Available capabilities::
+  - Available capabilities:
     - resources (direct and template)
     - prompts
     - tools (with services injection)
     - roots
-  - Currently only on SSE protocol (not stdio nor websocket)
+  - STDIO and SSE protocols support
   - Admin commands for discovery and invocation
+
+Protocols
+=========
+
+SSE events
+----------
+
+The publisher must be a HTTP publisher with only threads pool
+
+.. code:: ini
+
+    [publisher]
+    type = gunicorn  # or waitress
+
+STDIO
+-----
+
+The publisher must be `mcp-stdio`, installed from `nagare-publishers-mcp-stdio` package
+
+To not interfer with stdout communications, don't use `print`, only loggers set to not emit to stdout:
+
+.. code:: ini
+
+    [publisher]
+    type = mcp-stdio
+
+    [logging]
+      [[logger]]
+        [[[root]]]
+        handlers = root
+
+      [[handlers]]
+        [[[root]]]
+        class = logging.FileHandler
+        args = "('/tmp/mcp.log', 'w')"
 
 MCP server example
 ==================
@@ -93,4 +128,4 @@ Admin commands
 
 .. note::
 
-    All ``mcp`` subcommands accept several ``--root <name> <uri>`` arguments to define roots
+    All ``mcp`` subcommands accept several ``--root <name> <uri>`` arguments to define client roots

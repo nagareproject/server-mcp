@@ -44,7 +44,7 @@ class Resources(Plugin):
         else:
             self.template_resources.append((re.compile(regexp), (f, uri, name, mime_type, description)))
 
-    def list_concretes(self, app, channel, request_id, **params):
+    def list_concretes(self, app, request_id, **params):
         resources = []
 
         for uri, (_, name, mime_type, description) in self.concrete_resources.items():
@@ -56,9 +56,9 @@ class Resources(Plugin):
 
             resources.append(resource)
 
-        app.send_json(channel, request_id, {'resources': resources})
+        return app.create_rpc_response(request_id, {'resources': resources})
 
-    def list_templates(self, app, channel, request_id, **params):
+    def list_templates(self, app, request_id, **params):
         resources = []
 
         for regexp, (_, uri, name, mime_type, description) in self.template_resources:
@@ -70,12 +70,12 @@ class Resources(Plugin):
 
             resources.append(resource)
 
-        app.send_json(channel, request_id, {'resourceTemplates': resources})
+        return app.create_rpc_response(request_id, {'resourceTemplates': resources})
 
-    def complete(self, app, channel, request_id, argument, ref, **params):
-        app.send_json(channel, request_id, {'completion': {'values': []}})
+    def complete(self, app, request_id, argument, ref, **params):
+        return app.create_rpc_response(request_id, {'completion': {'values': []}})
 
-    def read(self, app, channel, request_id, uri, services_service, **params):
+    def read(self, app, request_id, uri, services_service, **params):
         f, name, mime_type, description = self.concrete_resources.get(uri, (None,) * 4)
         if f is not None:
             keywords = {}
@@ -101,4 +101,4 @@ class Resources(Plugin):
 
             streams.append((uri, mime_type, stream))
 
-        app.stream_json(channel, request_id, streams)
+        return app.create_rpc_streaming_response(request_id, streams)

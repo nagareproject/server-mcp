@@ -28,7 +28,7 @@ class Prompts(Plugin, dict):
     def register_prompt(self, f, name, description='', arguments=()):
         self[name] = f
 
-    def list(self, app, channel, request_id, **params):
+    def list(self, app, request_id, **params):
         prompts = []
         for name, f in sorted(self.items()):
             params, required, return_type = inspect_function(f)
@@ -37,15 +37,15 @@ class Prompts(Plugin, dict):
                 {'name': name, 'arguments': [{'name': name, 'required': name in required} for name in params]}
             )
 
-        app.send_json(channel, request_id, {'prompts': prompts})
+        return app.create_rpc_response(request_id, {'prompts': prompts})
 
-    def complete(self, app, channel, request_id, argument, ref, **params):
-        app.send_json(channel, request_id, {'completion': {'values': []}})
+    def complete(self, app, request_id, argument, ref, **params):
+        return app.create_rpc_response(request_id, {'completion': {'values': []}})
 
-    def get(self, app, channel, request_id, name, arguments, services_service, **kw):
+    def get(self, app, request_id, name, arguments, services_service, **kw):
         prompt = self[name]
         result = services_service(prompt, **arguments)
 
-        app.send_json(
-            channel, request_id, {'messages': [{'role': 'user', 'content': {'type': 'text', 'text': result}}]}
+        return app.create_rpc_response(
+            request_id, {'messages': [{'role': 'user', 'content': {'type': 'text', 'text': result}}]}
         )
