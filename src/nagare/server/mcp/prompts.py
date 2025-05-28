@@ -17,20 +17,24 @@ class Prompts(Plugin, dict):
         super().__init__(name, dist, **config)
         self.rpc_exports = {'list': self.list, 'complete': self.complete, 'get': self.get}
 
-    @property
-    def entries(self):
-        return [('register_prompt', self.register_prompt)]
+    @classmethod
+    def decorators(cls):
+        return [('prompt', cls.register)]
 
     @property
     def infos(self):
         return {'listChanged': False} if self else {}
 
-    def register_prompt(self, f, name, description='', arguments=()):
-        self[name] = f
+    def register(self, f, name=None, description=None, arguments=()):
+        name = name or f.__name__
+        description = description or f.__doc__ or ''
+        self[name] = (f, description)
+
+        return f
 
     def list(self, app, request_id, **params):
         prompts = []
-        for name, f in sorted(self.items()):
+        for name, (f, description) in sorted(self.items()):
             params, required, return_type = inspect_function(f)
 
             prompts.append(
@@ -43,7 +47,7 @@ class Prompts(Plugin, dict):
         return app.create_rpc_response(request_id, {'completion': {'values': []}})
 
     def get(self, app, request_id, name, arguments, services_service, **kw):
-        prompt = self[name]
+        prompt = self[name][0]
         result = services_service(prompt, **arguments)
 
         return app.create_rpc_response(

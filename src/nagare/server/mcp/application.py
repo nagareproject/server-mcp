@@ -15,7 +15,6 @@ from base64 import b64encode
 from functools import reduce, partial
 
 from nagare.services.router import route_for
-from nagare.services.logging import log
 from nagare.services.plugins import Plugins
 from nagare.server.http_application import RESTApp
 
@@ -24,9 +23,6 @@ class SSEClient:
     def __init__(self):
         self.id = str(uuid.uuid4())
         self.channel = queue.Queue()
-
-    def __repr__(self):
-        return 'SSE client <{}>'.format(self.id)
 
     def start_sending_loop(self, start_response, ping_timeout):
         send = start_response('200 OK', [('Content-Type', 'text/event-stream'), ('Cache-Control', 'no-cache')])
@@ -64,6 +60,9 @@ class SSEClient:
         if data is not None:
             self.channel.put((data_type, data))
 
+    def __repr__(self):
+        return 'SSE client <{}>'.format(self.id)
+
 
 class MCPApp(RESTApp):
     CONFIG_SPEC = RESTApp.CONFIG_SPEC | {
@@ -88,12 +87,20 @@ class MCPApp(RESTApp):
         'emergency': 7,
     }
 
+    capabilities = Plugins().load_plugins('capabilities', entry_points='nagare.mcp.capabilities')
+
     def __init__(self, name, dist, server_name, version, ping_timeout, chunk_size, services_service, **config):
         services_service(
-            super().__init__, name, dist, server_name=server_name, version=version, ping_timeout=ping_timeout, **config
+            super().__init__,
+            name,
+            dist,
+            server_name=server_name,
+            version=version,
+            ping_timeout=ping_timeout,
+            chunk_size=chunk_size,
+            **config,
         )
 
-        log.critical('HELLO' * 10)
         self.server_name = server_name
         self.version = version or dist.version  # Use provided version or distribution version.
         self.ping_timeout = ping_timeout
@@ -104,17 +111,8 @@ class MCPApp(RESTApp):
         self.roots = set()  # Roots sent by the client
         self.response_handler = None
 
-        self.sseclient_lock = threading.Lock()
+        self.sseclients_lock = threading.Lock()
         self.sseclients = {}
-        # Load plugins defined by the 'nagare.mcp.capabilities' entry point.
-        # These plugins represent the capabilities the server offers via JSON-RPC.
-        self.capabilities = Plugins().load_plugins('capabilities', entry_points='nagare.mcp.capabilities')
-
-        # Register methods from loaded capabilities directly onto the application instance.
-        # This allows calling capability methods like `self.capability_method(...)`.
-        for capability in self.capabilities.values():
-            for name, f in capability.entries:
-                setattr(self, name, f)
 
         # RPC namespaces
         self.rpc_exports = {name: capability.rpc_exports for name, capability in self.capabilities.items()} | {
@@ -123,6 +121,14 @@ class MCPApp(RESTApp):
             'ping': self.ping,
             'logging': {'setLevel': self.set_logging_level},
             'completion': {'complete': self.complete},
+        }
+
+    @classmethod
+    def decorators(cls):
+        return {
+            name: lambda *args, _d=decorator, _c=capability, **kw: lambda f: _d(_c, f, *args, **kw)
+            for capability in cls.capabilities.values()
+            for name, decorator in capability.decorators()
         }
 
     @staticmethod
@@ -179,20 +185,20 @@ class MCPApp(RESTApp):
 
     def create_sseclient(self):
         client = SSEClient()
-        with self.sseclient_lock:
+        with self.sseclients_lock:
             self.sseclients[client.id] = client
 
         return client
 
-    def disconnect_client(self, client):
-        with self.sseclient_lock:
+    def disconnect_sseclient(self, client):
+        with self.sseclients_lock:
             self.sseclients.pop(client.id, None)
 
     def handle_json_rpc(self, client, request):
         if method := request.get('method', ''):
             params = request.get('params', {})
 
-            log.debug("Calling JSON-RPC method '%s' with %r, from %r", method, params, client)
+            self.logger.debug("Calling JSON-RPC method '%s' with %r, from %r", method, params, client)
             return self.services(self.invoke, method.replace('.', '/').split('/'), request.get('id'), **params)
 
         if error := request.get('error'):
@@ -270,7 +276,7 @@ class MCPApp(RESTApp):
 @route_for(MCPApp)
 def create_channel(self, url, method, request, response):
     client = self.create_sseclient()
-    log.debug('%r created', client)
+    self.logger.debug('%r created', client)
 
     endpoint_url = request.create_redirect_url() + client.id
     client.send('endpoint', endpoint_url.encode('utf-8'))
@@ -278,12 +284,12 @@ def create_channel(self, url, method, request, response):
     try:
         client.start_sending_loop(response.start_response, self.ping_timeout)
     except BrokenPipeError:
-        log.debug('%r disconnected', client)
-        self.disconnect_client(client)
+        self.logger.debug('%r disconnected', client)
     except Exception as e:
-        log.error('Error sending data to %r: %r', e)
-        self.disconnect_client(client)
+        self.logger.error('Error sending data to %r: %r', e)
         raise
+    finally:
+        self.disconnect_sseclient(client)
 
     return [client, None]
 

@@ -19,32 +19,31 @@ class Tools(Plugin, dict):
         super().__init__(name, dist, **config)
         self.rpc_exports = {'list': self.list, 'call': self.call}
 
-    @property
-    def entries(self):
-        return [('register_tool', self.register)]
+    @classmethod
+    def decorators(cls):
+        return [('tool', cls.register)]
 
     @property
     def infos(self):
         return {'listChanged': False} if self else {}
 
-    def register(self, f, func_name=None):
-        self[func_name or f.__name__] = f
+    def register(self, f, name=None, description=None, arguments=None):
+        name = name or f.__name__
+        description = description or f.__doc__ or ''
+        self[name] = (f, description)
+
+        return f
 
     def list(self, app, request_id, **params):
         tools = []
-        for name, f in sorted(self.items()):
+        for name, (f, description) in sorted(self.items()):
             params, required, return_type = inspect_function(f)
 
             tools.append(
                 {
                     'name': name,
-                    'description': f.__doc__ or '',
-                    'inputSchema': {
-                        'properties': params,
-                        'required': tuple(required),
-                        'title': f.__doc__ or '',
-                        'type': return_type,
-                    },
+                    'description': description,
+                    'inputSchema': {'properties': params, 'required': tuple(required), 'type': return_type},
                 }
             )
 
@@ -53,7 +52,7 @@ class Tools(Plugin, dict):
     def call(self, app, request_id, name, arguments, services_service, **params):
         log.debug("Calling tool '%s' with %r", name, arguments)
 
-        f = self[name]
+        f = self[name][0]
         r = services_service(f, **arguments)
 
         return app.create_rpc_response(request_id, {'isError': False, 'content': [{'type': 'text', 'text': str(r)}]})

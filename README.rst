@@ -5,10 +5,12 @@ Nagare Model Context Protocol server
 Features:
 
   - Available capabilities:
+
+    - tools (with services injection)
     - resources (direct and template)
     - prompts
-    - tools (with services injection)
     - roots
+
   - STDIO and SSE protocols support
   - Admin commands for discovery and invocation
 
@@ -28,9 +30,9 @@ The publisher must be a HTTP publisher with only threads pool
 STDIO
 -----
 
-The publisher must be `mcp-stdio`, installed from `nagare-publishers-mcp-stdio` package
+The publisher must be ``mcp-stdio``, installed from ``nagare-publishers-mcp-stdio`` package
 
-To not interfer with stdout communications, don't use `print`, only loggers set to not emit to stdout:
+To not interfer with stdout communications, don't ``print`` and configure loggers to not emit to stdout:
 
 .. code:: ini
 
@@ -52,58 +54,55 @@ MCP server example
 
 .. code:: python
 
-    from nagare.server.mcp_application import MCPApp
+    from nagare.server.mcp_application import MCPApp, tool, resource, prompt
 
 
     class App(MCPApp):
-        def __init__(self, name, dist, services_service, **config):
-            services_service(super().__init__, name, dist, **config)
+        pass
 
-            self.register_tool(add)
-
-            self.register_resource(resource1, 'examples://r1', 'r1')
-            self.register_resource(resource2, 'examples://r2', 'r2')
-            self.register_resource(resource3, 'examples://r3', 'r3', mime_type='text/html')
-            self.register_resource(resource4, 'examples://r4', 'r4', mime_type='image/jpeg')
-            self.register_resource(resource5, 'greeting://hello/{name}', 'hello')
-
-            self.register_prompt(prompt1, 'prompt1')
 
     # Tools
     # -----
 
-    def add(a: int, b: int) -> int:
+    @tool(description='n1 + n2')
+    def add(a: int, b: int):
         """Add two numbers."""
         return a + b
 
     # Resources
     # ---------
 
+    @resource()
     def resource1(uri, name):
-        # In-memory text resource
         return 'Resource #1'
 
+    @resource(uri='r1')
+    def resource1_1(uri, name):
+        return 'Hello', 'world!'
+
+    @resource('r2', name='r2', mime_type='application/octet-stream')
     def resource2(uri, name):
-        # In-memory binary resource
         return b'Resource #2'
 
+    @resource(uri='r3', name='r3', mime_type='text/plain')
     def resource3(uri, name):
-        # Text stream resource
-        return open('/tmp/index.html')
+        return open('/tmp/f.py')
 
+    @resource(mime_type='application/pdf')
     def resource4(uri, name):
-        # Binary stream resource
-        return open('/tmp/logo.jpeg', 'rb')
+        return open('/tmp/doc.pdf', 'rb')
 
-    def resource4(uri, name):
-        # Multiple binary stream resources
-        return open('/tmp/logo1.jpeg', 'rb'), open('/tmp/logo2.jpeg', 'rb')
+    @resource('weather://{city}/current', 't1')
+    def template1(uri, name, city):
+        return 'Weather for city {}'.format(city)
 
     # Prompts
     # -------
 
+    @prompt()
     def prompt1(code, language='unknown'):
         return f'Explain how this {language} code works:\n\n{code}'
+
 
 Admin commands
 ==============

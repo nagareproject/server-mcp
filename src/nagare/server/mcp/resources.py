@@ -29,20 +29,26 @@ class Resources(Plugin):
         self.concrete_resources = {}
         self.template_resources = []
 
-    @property
-    def entries(self):
-        return [('register_resource', self.register_resource)]
+    @classmethod
+    def decorators(cls):
+        return [('resource', cls.register)]
 
     @property
     def infos(self):
         return {'subscribe': False, 'listChanged': False} if self else {}
 
-    def register_resource(self, f, uri, name=None, mime_type='text/plain', description=None):
+    def register(self, f, uri=None, name=None, mime_type='text/plain', description=None):
+        name = name or f.__name__
+        uri = uri or name
+        description = description or f.__doc__ or ''
+
         regexp = re.sub('{(.+?)}', r'(?P<\1>.+?)', uri)
         if regexp == uri:
             self.concrete_resources[uri] = (f, name, mime_type, description)
         else:
             self.template_resources.append((re.compile(regexp), (f, uri, name, mime_type, description)))
+
+        return f
 
     def list_concretes(self, app, request_id, **params):
         resources = []
