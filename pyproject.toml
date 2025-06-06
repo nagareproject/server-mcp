@@ -29,6 +29,7 @@ content-type = 'text/x-rst'
 entry-points = { file = 'entry-points.txt' }
 
 [project.optional-dependencies]
+stdio = ['nagare-publishers-stdio']
 dev = ['sphinx', 'sphinx_rtd_theme', 'pre-commit', 'ruff', 'pytest', 'twine']
 
 [project.urls]
