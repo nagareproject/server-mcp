@@ -16,6 +16,8 @@ from nagare.services.plugin import Plugin
 
 
 class Resources(Plugin):
+    PLUGIN_CATEGORY = 'nagare.applications'
+
     def __init__(self, name, dist, **config):
         super().__init__(name, dist, **config)
 
@@ -27,7 +29,7 @@ class Resources(Plugin):
         }
 
         self.concrete_resources = {}
-        self.template_resources = []
+        self.template_resources = {}
 
     @classmethod
     def decorators(cls):
@@ -37,7 +39,7 @@ class Resources(Plugin):
     def infos(self):
         return {'subscribe': False, 'listChanged': False} if self else {}
 
-    def register(self, f, uri=None, name=None, mime_type='text/plain', description=None):
+    def register(self, f, uri=None, name=None, mime_type='text/plain', description=None, completions=None):
         name = name or f.__name__
         uri = uri or name
         description = description or f.__doc__ or ''
@@ -46,7 +48,7 @@ class Resources(Plugin):
         if regexp == uri:
             self.concrete_resources[uri] = (f, name, mime_type, description)
         else:
-            self.template_resources.append((re.compile(regexp), (f, uri, name, mime_type, description)))
+            self.template_resources[uri] = (re.compile(regexp), f, name, mime_type, description, completions or {})
 
         return f
 
@@ -67,7 +69,7 @@ class Resources(Plugin):
     def list_templates(self, app, request_id, **params):
         resources = []
 
-        for regexp, (_, uri, name, mime_type, description) in self.template_resources:
+        for uri, (_, _, name, mime_type, description, _) in self.template_resources.items():
             resource = {'uriTemplate': uri, 'name': name}
             if description is not None:
                 resource['description'] = description
@@ -79,7 +81,9 @@ class Resources(Plugin):
         return app.create_rpc_response(request_id, {'resourceTemplates': resources})
 
     def complete(self, app, request_id, argument, ref, **params):
-        return app.create_rpc_response(request_id, {'completion': {'values': []}})
+        values = self.template_resources[ref['uri']][5].get(argument['name'], lambda v: [])(argument['value'])
+
+        return app.create_rpc_response(request_id, {'completion': {'values': values}})
 
     def read(self, app, request_id, uri, services_service, **params):
         f, name, mime_type, description = self.concrete_resources.get(uri, (None,) * 4)
@@ -87,12 +91,15 @@ class Resources(Plugin):
             keywords = {}
         else:
             matching_resources = filter(
-                itemgetter(0), ((reg.fullmatch(uri), params) for reg, params in self.template_resources)
+                itemgetter(0),
+                ((params[0].fullmatch(uri), uri, params) for uri, params in self.template_resources.items()),
             )
-            match, (f, _, name, mime_type, description) = next(matching_resources, (None, (None,) * 5))
+            match, uri, params = next(matching_resources, (None, None, None))
             if match is None:
                 return
+
             keywords = match.groupdict()
+            _, f, name, mime_type, _, _ = params
 
         data = services_service(f, uri, name, **keywords)
         if not isinstance(data, (list, tuple, types.GeneratorType)):

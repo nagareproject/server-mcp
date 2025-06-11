@@ -10,6 +10,7 @@ Features:
     - resources (direct and template)
     - prompts
     - roots
+    - optional completions for resources and prompts arguments
 
   - STDIO and SSE protocols support
   - Admin commands for discovery and invocation
@@ -92,7 +93,10 @@ MCP server example
     def resource4(uri, name):
         return open('/tmp/doc.pdf', 'rb')
 
-    @resource('weather://{city}/current', 't1')
+    def complete_city(city):
+        return [name for name in ['paris', 'new-york', 'sao-paulo', 'sidney'] if name.startswith(city.lower())]
+
+    @resource('weather://{city}/current', 't1', completions={'city': complete_city)
     def template1(uri, name, city):
         return 'Weather for city {}'.format(city)
 

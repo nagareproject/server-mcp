@@ -15,6 +15,8 @@ from .utils import inspect_function
 
 
 class Tools(Plugin, dict):
+    PLUGIN_CATEGORY = 'nagare.applications'
+
     def __init__(self, name, dist, **config):
         super().__init__(name, dist, **config)
         self.rpc_exports = {'list': self.list, 'call': self.call}
@@ -27,7 +29,7 @@ class Tools(Plugin, dict):
     def infos(self):
         return {'listChanged': False} if self else {}
 
-    def register(self, f, name=None, description=None, arguments=None):
+    def register(self, f, name=None, description=None):
         name = name or f.__name__
         description = description or f.__doc__ or ''
         self[name] = (f, description)

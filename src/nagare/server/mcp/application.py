@@ -255,6 +255,9 @@ class MCPApp(RESTApp):
             chunk_size=chunk_size,
         )
 
+        for name, capability in self.capabilities.items():
+            capability.name = self.name + '.' + name
+
     @classmethod
     def decorators(cls):
         return {
