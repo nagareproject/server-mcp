@@ -86,22 +86,25 @@ class Resources(Plugin):
         return app.create_rpc_response(request_id, {'completion': {'values': values}})
 
     def read(self, app, request_id, uri, services_service, **params):
-        f, name, mime_type, description = self.concrete_resources.get(uri, (None,) * 4)
+        f, name, mime_type, _ = self.concrete_resources.get(uri, (None,) * 4)
         if f is not None:
             keywords = {}
         else:
             matching_resources = filter(
                 itemgetter(0),
-                ((params[0].fullmatch(uri), uri, params) for uri, params in self.template_resources.items()),
+                (
+                    (params[0].fullmatch(uri), uri_template, params)
+                    for uri_template, params in self.template_resources.items()
+                ),
             )
-            match, uri, params = next(matching_resources, (None, None, None))
+            match, uri_template, params = next(matching_resources, (None, None, None))
             if match is None:
                 return
 
             keywords = match.groupdict()
             _, f, name, mime_type, _, _ = params
 
-        data = services_service(f, uri, name, **keywords)
+        data = services_service(f, uri_template, name, **keywords)
         if not isinstance(data, (list, tuple, types.GeneratorType)):
             data = [data]
 
