@@ -97,14 +97,14 @@ class Resources(Plugin):
                     for uri_template, params in self.template_resources.items()
                 ),
             )
-            match, uri_template, params = next(matching_resources, (None, None, None))
+            match, uri, params = next(matching_resources, (None, None, None))
             if match is None:
                 return
 
             keywords = match.groupdict()
             _, f, name, mime_type, _, _ = params
 
-        data = services_service(f, uri_template, name, **keywords)
+        data = services_service(f, uri, name, **keywords)
         if not isinstance(data, (list, tuple, types.GeneratorType)):
             data = [data]
 

@@ -18,7 +18,7 @@ def inspect_function(f):
     params = {}
     required = set()
     for name, param in sig.parameters.items():
-        if name != 'self':
+        if name != 'self' and not name.endswith('_service'):
             has_default = param.default is not inspect.Parameter.empty
             if not has_default:
                 required.add(name)
