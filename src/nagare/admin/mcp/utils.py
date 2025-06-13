@@ -7,7 +7,7 @@
 # this distribution.
 # --
 
-from ast import Expr, Name, Module, Return, Constant, FunctionDef, arg, arguments, fix_missing_locations
+from ast import Expr, Load, Name, Module, Return, Constant, FunctionDef, arg, arguments, fix_missing_locations
 
 CONVERTER = {'integer': int, 'boolean': bool, 'number': float, 'string': str}
 
@@ -16,16 +16,20 @@ def create_prototype(name, description, return_type, params, required):
     func = FunctionDef(
         name,
         arguments(
-            kwonlyargs=[arg(name, annotation=Name(CONVERTER[type_].__name__)) for name, type_ in params],
+            posonlyargs=[],
+            args=[],
+            defaults=[],
+            kwonlyargs=[arg(name, annotation=Name(CONVERTER[type_].__name__, Load())) for name, type_ in params],
             kw_defaults=[None if name in required else Constant(None) for name, _ in params],
         ),
         [
             Expr(Constant(description)),
             Return(Constant(None)),
         ],
+        decorator_list=[],
     )
 
     globals_ = {}
-    exec(compile(fix_missing_locations(Module([func])), '', 'exec'), globals_)  # noqa: S102
+    exec(compile(fix_missing_locations(Module([func], type_ignores=[])), '', 'exec'), globals_)  # noqa: S102
 
     return globals_[name]
