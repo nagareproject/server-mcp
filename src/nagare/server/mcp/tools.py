@@ -51,7 +51,8 @@ class Tools(Plugin, dict):
 
         return app.create_rpc_response(request_id, {'tools': tools})
 
-    def call(self, app, request_id, name, arguments, services_service, **params):
+    def call(self, app, request_id, name, services_service, arguments=None, **params):
+        arguments = arguments or {}
         log.debug("Calling tool '%s' with %r", name, arguments)
 
         f = self[name][0]
