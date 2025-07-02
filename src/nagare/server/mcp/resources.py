@@ -32,6 +32,10 @@ class Resources(Plugin):
         self.template_resources = {}
 
     @classmethod
+    def exports(cls):
+        return []
+
+    @classmethod
     def decorators(cls):
         return [('resource', cls.register)]
 

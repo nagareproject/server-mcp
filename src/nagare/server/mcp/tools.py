@@ -7,11 +7,32 @@
 # this distribution.
 # --
 
+from base64 import b64encode
 
 from nagare.services.plugin import Plugin
 from nagare.services.logging import log
 
 from .utils import inspect_function
+
+
+class Result(dict):
+    pass
+
+
+def TextResult(text):
+    return Result(type='text', text=str(text))
+
+
+def ImageResult(mime_type, data):
+    return Result(type='image', mimeType=mime_type, data=data)
+
+
+def TextResourceResult(text, annotations=None):
+    return Result({'type': 'resource', 'text': text} | ({'annotations': annotations} if annotations else {}))
+
+
+def BlobResourceResult(blob):
+    return Result(type='resource', blob=b64encode(blob) if isinstance(blob, bytes) else blob)
 
 
 class Tools(Plugin, dict):
@@ -20,6 +41,10 @@ class Tools(Plugin, dict):
     def __init__(self, name, dist, **config):
         super().__init__(name, dist, **config)
         self.rpc_exports = {'list': self.list, 'call': self.call}
+
+    @classmethod
+    def exports(cls):
+        return [TextResult, ImageResult, TextResourceResult, BlobResourceResult]
 
     @classmethod
     def decorators(cls):
@@ -55,7 +80,19 @@ class Tools(Plugin, dict):
         arguments = arguments or {}
         log.debug("Calling tool '%s' with %r", name, arguments)
 
-        f = self[name][0]
-        r = services_service(f, **arguments)
+        f, _ = self.get(name, (None, None))
+        if f is None:
+            return app.create_rpc_response(request_id, {'isError': True})
 
-        return app.create_rpc_response(request_id, {'isError': False, 'content': [{'type': 'text', 'text': str(r)}]})
+        results = services_service(f, **arguments)
+
+        response = {}
+        for result in results if isinstance(results, (list, tuple)) else [results]:
+            if isinstance(result, Result):
+                response.setdefault('content', []).append(result)
+            elif isinstance(result, dict):
+                response['structuredContent'] = result
+            else:
+                response.setdefault('content', []).append(TextResult(result))
+
+        return app.create_rpc_response(request_id, {'isError': False} | response)

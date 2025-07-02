@@ -36,7 +36,7 @@ class Client:
 
         self.logging_level = self.LOGGING_LEVELS['error']
         self.roots = set()  # Roots sent by the client
-        self.client_capabilities = {}
+        self.capabilities = {}
 
         self.channel = queue.Queue()
         self.request_id = 0
@@ -147,7 +147,7 @@ class Client:
 
     def handle_json_rpc(self, request, services_service):
         if method := request.get('method', ''):
-            params = request.get('params', {})
+            params = request.get('params') or {}
 
             self.logger.debug("Calling JSON-RPC method '%s' with %r", method, params)
             return services_service(self.invoke, method.replace('.', '/').split('/'), request.get('id'), **params)
@@ -174,7 +174,8 @@ class Client:
         return services_service(f, self, *args, **kw) if callable(f) else None
 
     def initialize(self, client_capabilities):
-        self.client_capabilities = client_capabilities
+        self.logger.info('Client capabilities: %s', ', '.join(sorted(client_capabilities)))
+        self.capabilities = client_capabilities
 
     def list_roots(self):
         return self.create_rpc_request('roots/list', self.on_roots_received)
@@ -185,7 +186,7 @@ class Client:
 
     @staticmethod
     def on_initialized(self, _):
-        return self.list_roots() if 'roots' in self.client_capabilities else None
+        return self.list_roots() if 'roots' in self.capabilities else None
 
     @staticmethod
     def on_roots_changed(self, _):
@@ -257,6 +258,10 @@ class MCPApp(RESTApp):
 
         for name, capability in self.capabilities.items():
             capability.name = self.name + '.' + name
+
+    @classmethod
+    def exports(cls):
+        return {o.__name__: o for capability in cls.capabilities.values() for o in capability.exports()}
 
     @classmethod
     def decorators(cls):

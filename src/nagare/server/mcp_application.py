@@ -11,4 +11,5 @@ import sys
 
 from .mcp.application import MCPApp  # noqa: F401
 
+sys.modules[__name__].__dict__.update(MCPApp.exports())
 sys.modules[__name__].__dict__.update(MCPApp.decorators())

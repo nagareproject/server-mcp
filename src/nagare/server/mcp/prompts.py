@@ -20,6 +20,10 @@ class Prompts(Plugin, dict):
         self.rpc_exports = {'list': self.list, 'complete': self.complete, 'get': self.get}
 
     @classmethod
+    def exports(cls):
+        return []
+
+    @classmethod
     def decorators(cls):
         return [('prompt', cls.register)]
 
