@@ -24,6 +24,19 @@ from nagare.services.plugins import Plugins
 from nagare.server.http_application import RESTApp
 
 
+class ClientServices:
+    def __init__(self, client, progress_token):
+        self.client = client
+        self.progress_token = progress_token
+
+    def progress(self, progress, total=None, message=None):
+        if self.progress_token is not None:
+            self.client.notify_progress(self.progress_token, progress, total, message)
+
+    def log(self, level, data, logger=None):
+        self.client.log(level, data, logger)
+
+
 class Client:
     CLEANUP_PERIODICITY = 10
     LOGGING_LEVELS = {
@@ -120,6 +133,9 @@ class Client:
             separators=(',', ':'),
         ).encode('utf-8')
 
+    def create_rpc_notification(self, method, **params):
+        return json.dumps({'jsonrpc': '2.0', 'method': method, 'params': params}, separators=(',', ':')).encode('utf-8')
+
     @staticmethod
     def create_rpc_response(response_id, result):
         return json.dumps({'jsonrpc': '2.0', 'id': response_id, 'result': result}, separators=(',', ':')).encode(
@@ -166,7 +182,10 @@ class Client:
             params = request.get('params') or {}
 
             self.logger.debug("Calling JSON-RPC method '%s' with %r", method, params)
-            return services_service(self.invoke, method.replace('.', '/').split('/'), request.get('id'), **params)
+
+            services = services_service.copy(client=ClientServices(self, params.get('_meta', {}).get('progressToken')))
+
+            return services(self.invoke, method.replace('.', '/').split('/'), request.get('id'), **params)
 
         if error := request.get('error'):
             self.logger.error(error)
@@ -222,12 +241,6 @@ class Client:
 
         return self.create_rpc_response(request_id, {})
 
-    """
-    def send_log(self, logger, level, data):
-        if self.LOGGING_LEVELS[level] >= self.logging_level:
-            return self.create_rpc_request('notifications/message', leve=level, logger=logger, data=data)
-    """
-
     @staticmethod
     def ping(self, request_id, **params):
         return self.create_rpc_response(request_id, {})
@@ -237,6 +250,21 @@ class Client:
         return services_service(
             self.invoke, ((ref['type'].removeprefix('ref/')) + 's', 'complete'), *args, argument, ref, **params
         )
+
+    def notify_progress(self, progress_token, progress, total=None, message=None):
+        params = (
+            {'progressToken': progress_token, 'progress': progress}
+            | ({'total': total} if total is not None else {})
+            | ({'message': message} if message is not None else {})
+        )
+
+        self.send('message', self.create_rpc_notification('notifications/progress', **params))
+
+    def log(self, level, data, logger=None):
+        if self.LOGGING_LEVELS[level] >= self.logging_level:
+            params = {'level': level, 'data': data} | ({'logger': logger} if logger is not None else {})
+
+            self.send('message', self.create_rpc_notification('notifications/message', **params))
 
 
 class MCPApp(RESTApp):
