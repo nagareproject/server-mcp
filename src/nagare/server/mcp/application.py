@@ -18,6 +18,7 @@ from base64 import b64encode
 from functools import reduce, partial
 from itertools import dropwhile
 
+from nagare import log
 from nagare.services.router import route_for
 from nagare.services.plugins import Plugins
 from nagare.server.http_application import RESTApp
@@ -45,8 +46,12 @@ class Client:
 
         # RPC namespaces
         self.rpc_exports = rpc_exports | {
-            'notifications': {'initialized': self.on_initialized, 'roots': {'list_changed': self.on_roots_changed}},
-            # 'ping': self.ping,  # noqa: ERA001
+            'notifications': {
+                'initialized': self.on_initialized,
+                'cancelled': self.on_cancel,
+                'roots': {'list_changed': self.on_roots_changed},
+            },
+            'ping': self.ping,
             'logging': {'setLevel': self.set_logging_level},
             'completion': {'complete': self.complete},
         }
@@ -121,6 +126,17 @@ class Client:
             'utf-8'
         )
 
+    @staticmethod
+    def create_rpc_error(response_id, code, message='', data=None):
+        return json.dumps(
+            {
+                'jsonrpc': '2.0',
+                'id': response_id,
+                'error': {'code': code, 'message': message} | ({'data': data} if data is not None else {}),
+            },
+            separators=(',', ':'),
+        ).encode('utf-8')
+
     def create_rpc_streaming_response(self, response_id, streams):
         yield b'{"jsonrpc": "2.0", "id": %s, "result": {"contents": [' % json.dumps(response_id).encode('utf-8')
 
@@ -173,8 +189,12 @@ class Client:
 
         return services_service(f, self, *args, **kw) if callable(f) else None
 
-    def initialize(self, client_capabilities):
-        self.logger.info('Client capabilities: %s', ', '.join(sorted(client_capabilities)))
+    def initialize(self, client_protocol_version, client_capabilities):
+        self.logger.info(
+            'Client protocol version: %s and capabilities: %s',
+            client_protocol_version,
+            ', '.join(sorted(client_capabilities)),
+        )
         self.capabilities = client_capabilities
 
     def list_roots(self):
@@ -187,6 +207,10 @@ class Client:
     @staticmethod
     def on_initialized(self, _):
         return self.list_roots() if 'roots' in self.capabilities else None
+
+    @staticmethod
+    def on_cancel(self, _, requestId, reason, **params):
+        self.logger.debug('Cancel notification received for request: %s, reason: %s', requestId, reason)
 
     @staticmethod
     def on_roots_changed(self, _):
@@ -202,11 +226,11 @@ class Client:
     def send_log(self, logger, level, data):
         if self.LOGGING_LEVELS[level] >= self.logging_level:
             return self.create_rpc_request('notifications/message', leve=level, logger=logger, data=data)
+    """
 
     @staticmethod
-    def ping(self, client, request_id, **params):
-        self.send_json(request_id, {})
-    """
+    def ping(self, request_id, **params):
+        return self.create_rpc_response(request_id, {})
 
     @staticmethod
     def complete(self, *args, argument, ref, services_service, **params):
@@ -226,6 +250,7 @@ class MCPApp(RESTApp):
         # the stream, only potentially at the very end.
         'chunk_size': 'integer(default={})'.format(10 * 1024 + 2),
     }
+    PROTOCOL_VERSION = '2024-11-05'
 
     capabilities = Plugins().load_plugins('capabilities', entry_points='nagare.mcp.capabilities')
 
@@ -291,13 +316,13 @@ class MCPApp(RESTApp):
 
         return response
 
-    def initialize(self, client, request_id, capabilities, **params):
-        client.initialize(capabilities)
+    def initialize(self, client, request_id, protocolVersion, capabilities, **params):
+        client.initialize(protocolVersion, capabilities)
 
         return client.create_rpc_response(
             request_id,
             {
-                'protocolVersion': '2024-11-05',
+                'protocolVersion': self.PROTOCOL_VERSION,
                 'serverInfo': {'name': self.server_name, 'version': self.version},
                 'capabilities': {'roots': {}, 'completion': {}, 'logging': {}}
                 | {name: capability.infos for name, capability in self.capabilities.items() if capability},
@@ -316,7 +341,7 @@ def create_channel(self, url, method, request, response):
     with self.clients_lock:
         self.clients[client_id] = client
 
-    self.logger.debug('%r created', client)
+    log.debug('%r created', client)
 
     endpoint_url = request.create_redirect_url() + client_id
     client.send('endpoint', endpoint_url.encode('utf-8'))
