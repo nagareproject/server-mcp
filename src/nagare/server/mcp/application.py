@@ -25,9 +25,10 @@ from nagare.server.http_application import RESTApp
 
 
 class ClientServices:
-    def __init__(self, client, progress_token):
+    def __init__(self, client, progress_token, roots):
         self.client = client
         self.progress_token = progress_token
+        self.roots = roots
 
     def progress(self, progress, total=None, message=None):
         if self.progress_token is not None:
@@ -183,7 +184,9 @@ class Client:
 
             self.logger.debug("Calling JSON-RPC method '%s' with %r", method, params)
 
-            services = services_service.copy(client=ClientServices(self, params.get('_meta', {}).get('progressToken')))
+            services = services_service.copy(
+                client=ClientServices(self, params.get('_meta', {}).get('progressToken'), self.roots)
+            )
 
             return services(self.invoke, method.replace('.', '/').split('/'), request.get('id'), **params)
 
@@ -221,7 +224,7 @@ class Client:
 
     def on_roots_received(self, roots):
         self.logger.debug('Roots received %r', roots)
-        self.roots = {root['uri'] for root in roots}
+        self.roots = {(root.get('name'), root['uri']) for root in roots}
 
     @staticmethod
     def on_initialized(self, _):

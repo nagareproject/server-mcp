@@ -8,8 +8,10 @@
 # --
 
 import inspect
+from ast import Expr, Load, Name, Module, Return, Constant, FunctionDef, arg, arguments, fix_missing_locations
 
-CONVERTER = {inspect.Parameter.empty: 'object', int: 'integer', bool: 'boolean', float: 'number', str: 'string'}
+TYPE_TO_NAME = {inspect.Parameter.empty: 'object', int: 'integer', bool: 'boolean', float: 'number', str: 'string'}
+NAME_TO_TYPE = {'integer': int, 'boolean': bool, 'number': float, 'string': str}
 
 
 def inspect_function(f):
@@ -23,8 +25,31 @@ def inspect_function(f):
             if not has_default:
                 required.add(name)
 
-            params[name] = {'type': CONVERTER[param.annotation]}
+            params[name] = {'type': TYPE_TO_NAME[param.annotation]}
             if has_default:
                 params[name]['default'] = param.default
 
-    return params, required, CONVERTER[sig.return_annotation]
+    return params, required, TYPE_TO_NAME[sig.return_annotation]
+
+
+def create_prototype(name, description, params, required, return_type):
+    func = FunctionDef(
+        name,
+        arguments(
+            posonlyargs=[],
+            args=[],
+            defaults=[],
+            kwonlyargs=[arg(name, annotation=Name(NAME_TO_TYPE[type_].__name__, Load())) for name, type_ in params],
+            kw_defaults=[None if name in required else Constant(None) for name, _ in params],
+        ),
+        [
+            Expr(Constant(description)),
+            Return(Constant(None)),
+        ],
+        decorator_list=[],
+    )
+
+    globals_ = {}
+    exec(compile(fix_missing_locations(Module([func], type_ignores=[])), '', 'exec'), globals_)  # noqa: S102
+
+    return globals_[name]

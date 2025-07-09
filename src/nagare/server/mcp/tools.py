@@ -12,7 +12,7 @@ from base64 import b64encode
 from nagare.services.plugin import Plugin
 from nagare.services.logging import log
 
-from .utils import inspect_function
+from .utils import create_prototype, inspect_function
 
 
 class Result(dict):
@@ -24,19 +24,28 @@ def TextResult(text):
 
 
 def ImageResult(mime_type, data):
+    if isinstance(data, bytes):
+        data = b64encode(data).decode('ascii')
+
     return Result(type='image', mimeType=mime_type, data=data)
 
 
-def TextResourceResult(text, annotations=None):
-    return Result({'type': 'resource', 'text': text} | ({'annotations': annotations} if annotations else {}))
+def TextResourceResult(uri, text):
+    return Result(type='resource', resource={'uri': uri, 'text': text, 'mimeType': 'text/plain'})
 
 
-def BlobResourceResult(blob):
-    return Result(type='resource', blob=b64encode(blob) if isinstance(blob, bytes) else blob)
+def BlobResourceResult(uri, blob, mime_type=None):
+    if isinstance(blob, bytes):
+        blob = b64encode(blob).decode('ascii')
+
+    return Result(type='resource', resource={'uri': uri, 'blob': blob} | ({'mimeType': mime_type} if mime_type else {}))
 
 
 class Tools(Plugin, dict):
     PLUGIN_CATEGORY = 'nagare.applications'
+
+    METHOD_NOT_FOUND = -32601
+    INVALID_PARAMS = -32602
 
     def __init__(self, name, dist, **config):
         super().__init__(name, dist, **config)
@@ -82,9 +91,23 @@ class Tools(Plugin, dict):
 
         f, _ = self.get(name, (None, None))
         if f is None:
-            return app.create_rpc_response(request_id, {'isError': True})
+            return app.create_rpc_response(request_id, {'isError': True, 'code': self.METHOD_NOT_FOUND})
 
-        results = services_service(f, **arguments)
+        try:
+            params, required, return_type = inspect_function(f)
+            params = [(name, meta['type']) for name, meta in params.items()]
+
+            create_prototype(name, '', params, required, return_type)(**arguments)
+        except Exception as e:
+            return app.create_rpc_response(
+                request_id, {'isError': True, 'code': self.INVALID_PARAMS, 'message': str(e)}
+            )
+
+        try:
+            results = services_service(f, **arguments)
+        except Exception as e:
+            self.logger.exception(e)
+            return app.create_rpc_response(request_id, {'isError': True, 'message': str(e)})
 
         response = {}
         for result in results if isinstance(results, (list, tuple)) else [results]:

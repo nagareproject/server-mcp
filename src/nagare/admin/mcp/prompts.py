@@ -11,8 +11,8 @@ from pydoc import plaintext
 import yaml
 
 from nagare.admin import admin
+from nagare.server.mcp.utils import create_prototype
 
-from .utils import create_prototype
 from .commands import Command
 
 
@@ -26,9 +26,9 @@ class Prompt(Command):
             prompt['name']: create_prototype(
                 prompt['name'],
                 prompt.get('description', ''),
-                None,
                 [(argument['name'], 'string') for argument in prompt['arguments']],
                 {argument['name'] for argument in prompt['arguments'] if argument['required']},
+                None,
             )
             for prompt in self.send('prompts/list')['prompts']
         }

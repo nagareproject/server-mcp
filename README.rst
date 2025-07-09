@@ -12,8 +12,13 @@ Features:
     - roots
     - optional completions for resources and prompts arguments
 
+  - Available utilities:
+
+    - server can send logs to the client (`client_service.progress()`)
+    - server can send progresses to the client (`client_service.log()`)
+
   - STDIO and SSE protocols support
-  - Admin commands for discovery and invocation
+  - Admin commands for discovery and invocation of SSE server methods
 
 Protocols
 =========
@@ -55,6 +60,8 @@ MCP server example
 
 .. code:: python
 
+    import time
+
     from nagare.server.mcp_application import MCPApp, tool, resource, prompt
 
 
@@ -70,7 +77,17 @@ MCP server example
         """Add two numbers."""
         return a + b
 
-    # Resources
+    @tool
+    def grettings(client_service):
+        for i in range(5):
+            time.sleep(i)
+            client_service.progress(i, 5)
+
+        client_service.log('debug', 'ready to answer...')
+
+        return 'Hello'
+
+        # Resources
     # ---------
 
     @resource()

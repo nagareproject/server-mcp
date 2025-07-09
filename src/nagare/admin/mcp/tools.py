@@ -11,8 +11,8 @@ from pydoc import plaintext
 import yaml
 
 from nagare.admin import admin
+from nagare.server.mcp.utils import create_prototype
 
-from .utils import create_prototype
 from .commands import Command
 
 
@@ -32,9 +32,9 @@ class Tool(Command):
             tool['name']: create_prototype(
                 tool['name'],
                 tool['description'],
-                tool['inputSchema']['type'],
                 [(name, prop['type']) for name, prop in tool['inputSchema']['properties'].items()],
                 set(tool['inputSchema']['required']),
+                tool['inputSchema']['type'],
             )
             for tool in self.send('tools/list')['tools']
         }
@@ -81,7 +81,7 @@ class Call(Tool):
 
         result = self.send('tools/call', name=method.replace('.', '/'), arguments=args)
         if result['isError']:
-            print('ERROR!')
+            print('ERROR' + ((': ' + str(message)) if (message := result.get('message') or result.get('code')) else ''))
         else:
             print(yaml.dump(result['content']))
 
