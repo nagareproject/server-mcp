@@ -74,7 +74,7 @@ class Command(admin.Command):
                     if callable(f):
                         f(event['id'])
                 else:
-                    result = event['result']
+                    result = event.get('error') or event['result']
 
         return result
 

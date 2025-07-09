@@ -91,7 +91,7 @@ class Tools(Plugin, dict):
 
         f, _ = self.get(name, (None, None))
         if f is None:
-            return app.create_rpc_response(request_id, {'isError': True, 'code': self.METHOD_NOT_FOUND})
+            return app.create_rpc_error(request_id, self.METHOD_NOT_FOUND, 'tool not found')
 
         try:
             params, required, return_type = inspect_function(f)
@@ -99,15 +99,14 @@ class Tools(Plugin, dict):
 
             create_prototype(name, '', params, required, return_type)(**arguments)
         except Exception as e:
-            return app.create_rpc_response(
-                request_id, {'isError': True, 'code': self.INVALID_PARAMS, 'message': str(e)}
-            )
+            return app.create_rpc_error(request_id, self.INVALID_PARAMS, str(e))
 
         try:
             results = services_service(f, **arguments)
         except Exception as e:
             self.logger.exception(e)
-            return app.create_rpc_response(request_id, {'isError': True, 'message': str(e)})
+
+            return app.create_rpc_response(request_id, {'isError': True, 'content': [TextResult(str(e))]})
 
         response = {}
         for result in results if isinstance(results, (list, tuple)) else [results]:

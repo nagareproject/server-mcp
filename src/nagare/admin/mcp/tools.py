@@ -76,12 +76,14 @@ class Call(Tool):
 
             func(**args)
         except Exception as e:
-            print('Error:', e)
+            print('Protocol Error:', e)
             return -1
 
         result = self.send('tools/call', name=method.replace('.', '/'), arguments=args)
-        if result['isError']:
-            print('ERROR' + ((': ' + str(message)) if (message := result.get('message') or result.get('code')) else ''))
+        if result.get('code', False):
+            print('Protocol Error' + ((': ' + str(message)) if (message := result.get('message')) else ''))
+        elif result.get('isError', False):
+            print('Call Error:', result['content'][0]['text'])
         else:
             print(yaml.dump(result['content']))
 
