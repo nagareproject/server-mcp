@@ -11,5 +11,8 @@
 
 tests:
   script:
+
     - pip3 install '.[dev]'
-    - make qa
+    - ruff format --check src
+    - ruff check src
+    - pytest tests
