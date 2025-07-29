@@ -7,48 +7,86 @@
 # this distribution.
 # --
 
+from base64 import b64encode
+
+from filetype import guess_mime
+
 from nagare.services.plugin import Plugin
 
-from .utils import inspect_function
+from .prototypes import jsonschema_to_proto, proto_to_jsonschema
+
+
+class PromptResult(dict):
+    pass
+
+
+def PromptText(text, role='user'):
+    return PromptResult(role=role, content={'type': 'text', 'text': str(text)})
+
+
+def PromptImage(data, role='user', mime_type=None):
+    return PromptResult(
+        role=role,
+        content={
+            'type': 'image',
+            'mimeType': mime_type or guess_mime(data) or 'application/octet-stream',
+            'data': b64encode(data).decode('ascii'),
+        },
+    )
+
+
+def PromptTextResource(uri, text, role='user'):
+    return PromptResult(
+        role=role, content={'type': 'resource', 'resource': {'uri': uri, 'text': text, 'mimeType': 'text/plain'}}
+    )
+
+
+def PromptBlobResource(uri, blob, role='user', mime_type=None):
+    return PromptResult(
+        role=role,
+        content={
+            'type': 'resource',
+            'resource': {'uri': uri, 'blob': b64encode(blob).decode('ascii')}
+            | ({'mimeType': mime_type} if mime_type else {}),
+        },
+    )
 
 
 class Prompts(Plugin, dict):
     PLUGIN_CATEGORY = 'nagare.applications'
 
-    def __init__(self, name, dist, **config):
-        super().__init__(name, dist, **config)
-        self.rpc_exports = {'list': self.list, 'complete': self.complete, 'get': self.get}
+    INVALID_PARAMS = -32602
+    INTERNAL_ERROR = -32603
 
-    @classmethod
-    def exports(cls):
-        return []
-
-    @classmethod
-    def decorators(cls):
-        return [('prompt', cls.register)]
+    @property
+    def rpc_exports(self):
+        return {'list': self.list, 'complete': self.complete, 'get': self.get}
 
     @property
     def infos(self):
         return {'listChanged': False} if self else {}
 
     def register(self, f, name=None, description=None, descriptions=None, completions=None):
-        name = name or f.__name__
-        description = description or f.__doc__ or ''
-        self[name] = (f, description, descriptions or {}, completions or {})
+        schema = proto_to_jsonschema(f, name, description)
+        proto = jsonschema_to_proto(schema)
+        self[proto.__name__] = (proto, f, description, descriptions or {}, completions or {})
 
         return f
 
     def list(self, app, request_id, **params):
         prompts = []
-        for name, (f, description, descriptions, _) in sorted(self.items()):
-            params, required, return_type = inspect_function(f)
+        for name, (_, f, description, descriptions, _) in sorted(self.items()):
+            schema = proto_to_jsonschema(f, name, description)
+            properties = schema['inputSchema']['properties']
+            required = set(properties.get('required', []))
 
             prompts.append(
                 {
                     'name': name,
+                    'description': schema['description'],
                     'arguments': [
                         {'name': name, 'required': name in required, 'description': descriptions.get(name, '')}
-                        for name in params
+                        for name in properties
                     ],
                 }
             )
@@ -56,14 +94,33 @@ class Prompts(Plugin, dict):
         return app.create_rpc_response(request_id, {'prompts': prompts})
 
     def complete(self, app, request_id, argument, ref, **params):
-        values = self[ref['name']][3].get(argument['name'], lambda v: [])(argument['value'])
+        values = self[ref['name']][-1].get(argument['name'], lambda v: [])(argument['value'])
 
         return app.create_rpc_response(request_id, {'completion': {'values': values}})
 
     def get(self, app, request_id, name, arguments, services_service, **kw):
-        prompt = self[name][0]
-        result = services_service(prompt, **arguments)
+        if name not in self:
+            return app.create_rpc_error(request_id, self.INVALID_PARAMS, 'prompt not found')
 
-        return app.create_rpc_response(
-            request_id, {'messages': [{'role': 'user', 'content': {'type': 'text', 'text': result}}]}
-        )
+        proto, f = self[name][:2]
+
+        try:
+            proto(**arguments)
+        except Exception as e:
+            return app.create_rpc_error(request_id, self.INVALID_PARAMS, str(e))
+
+        try:
+            results = services_service(f, **arguments)
+        except Exception as e:
+            self.logger.exception(e)
+            return app.create_rpc_error(request_id, self.INTERNAL_ERROR, str(e))
+
+        response = {
+            'messages': (result if isinstance(result, PromptResult) else PromptText(result))
+            for result in (results if isinstance(results, (list, tuple)) else [results])
+        }
+
+        return app.create_rpc_response(request_id, response)
+
+    EXPORTS = [PromptText, PromptImage, PromptTextResource, PromptBlobResource]
+    DECORATORS = [('prompt', register)]

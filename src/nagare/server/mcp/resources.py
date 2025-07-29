@@ -21,23 +21,17 @@ class Resources(Plugin):
     def __init__(self, name, dist, **config):
         super().__init__(name, dist, **config)
 
-        self.rpc_exports = {
+        self.concrete_resources = {}
+        self.template_resources = {}
+
+    @property
+    def rpc_exports(self):
+        return {
             'list': self.list_concretes,
             'templates': {'list': self.list_templates},
             'read': self.read,
             'complete': self.complete,
         }
-
-        self.concrete_resources = {}
-        self.template_resources = {}
-
-    @classmethod
-    def exports(cls):
-        return []
-
-    @classmethod
-    def decorators(cls):
-        return [('resource', cls.register)]
 
     @property
     def infos(self):
@@ -122,3 +116,6 @@ class Resources(Plugin):
             streams.append((uri, mime_type, stream))
 
         return app.create_rpc_streaming_response(request_id, streams)
+
+    EXPORTS = []
+    DECORATORS = [('resource', register)]

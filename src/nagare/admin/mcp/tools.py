@@ -6,12 +6,13 @@
 # the file LICENSE.txt, which you should have received as part of
 # this distribution.
 # --
+
 from pydoc import plaintext
 
 import yaml
 
 from nagare.admin import admin
-from nagare.server.mcp.utils import create_prototype
+from nagare.server.mcp.prototypes import jsonschema_to_proto
 
 from .commands import Command
 
@@ -21,23 +22,8 @@ class Tools(admin.Commands):
 
 
 class Tool(Command):
-    @staticmethod
-    def bool(v):
-        return v == 'true'
-
-    CONVERTER = {'integer': int, 'boolean': bool, 'number': float, 'string': str}
-
     def create_tools(self):
-        return {
-            tool['name']: create_prototype(
-                tool['name'],
-                tool['description'],
-                [(name, prop['type']) for name, prop in tool['inputSchema']['properties'].items()],
-                set(tool['inputSchema']['required']),
-                tool['inputSchema']['type'],
-            )
-            for tool in self.send('tools/list')['tools']
-        }
+        return {tool['name']: tool for tool in self.send('tools/list')['tools']}
 
 
 class List(Tool):
@@ -45,8 +31,8 @@ class List(Tool):
 
     def run(self):
         print('Available tools:\n')
-        for _, proto in sorted(self.create_tools().items()):
-            print(' -', plaintext.document(proto))
+        for _, schema in sorted(self.create_tools().items()):
+            print(' -', plaintext.document(jsonschema_to_proto(schema)))
 
         return 0
 
@@ -63,28 +49,31 @@ class Call(Tool):
     def run(self, method, params):
         tools = self.create_tools()
 
-        func = tools.get(method)
-        if func is None:
+        schema = tools.get(method)
+        if schema is None:
             print('Error: tool not found!')
             return -1
+
+        proto = jsonschema_to_proto(schema)
 
         try:
             args = {}
             for param in params or ():
                 name, value = param.split('=')
-                args[name] = func.__annotations__.get(name, lambda v: v)(value)
+                args[name] = proto.__annotations__.get(name, lambda v: v)(value)
 
-            func(**args)
+            proto(**args)
         except Exception as e:
             print('Protocol Error:', e)
             return -1
 
         result = self.send('tools/call', name=method.replace('.', '/'), arguments=args)
-        if result.get('code', False):
-            print('Protocol Error' + ((': ' + str(message)) if (message := result.get('message')) else ''))
-        elif result.get('isError', False):
+
+        if 'code' in result:
+            print('Protocol Error:', result.get('message') or result['code'])
+        elif result.pop('isError', False):
             print('Call Error:', result['content'][0]['text'])
         else:
-            print(yaml.dump(result['content']))
+            print(yaml.dump(result))
 
         return 0

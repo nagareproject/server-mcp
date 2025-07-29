@@ -19,7 +19,14 @@ description = 'Nagare MCP server'
 authors = [{ name = 'Net-ng' }, { email = 'contact@net-ng.com' }]
 license = { file = 'LICENSE.txt' }
 requires-python = '>=3.9'
-dependencies = ['nagare-server-http', 'sseclient-py', 'httpx', 'pyyaml']
+dependencies = [
+    'nagare-server-http',
+    'sseclient-py',
+    'httpx',
+    'pydantic',
+    'pyyaml',
+    'filetype',
+]
 
 [project.readme]
 file = 'README.rst'

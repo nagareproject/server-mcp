@@ -8,37 +8,43 @@
 # --
 
 from base64 import b64encode
+from operator import attrgetter
+from itertools import chain
+
+import pydantic_core
+from filetype import guess_mime
 
 from nagare.services.plugin import Plugin
 from nagare.services.logging import log
 
-from .utils import create_prototype, inspect_function
+from .prototypes import jsonschema_to_proto, proto_to_jsonschema
 
 
-class Result(dict):
+class ToolResult(dict):
     pass
 
 
-def TextResult(text):
-    return Result(type='text', text=str(text))
+def ToolText(text):
+    return ToolResult(type='text', text=str(text))
 
 
-def ImageResult(mime_type, data):
-    if isinstance(data, bytes):
-        data = b64encode(data).decode('ascii')
-
-    return Result(type='image', mimeType=mime_type, data=data)
-
-
-def TextResourceResult(uri, text):
-    return Result(type='resource', resource={'uri': uri, 'text': text, 'mimeType': 'text/plain'})
+def ToolImage(data, mime_type=None):
+    return ToolResult(
+        type='image',
+        mimeType=mime_type or guess_mime(data) or 'application/octet-stream',
+        data=b64encode(data).decode('ascii'),
+    )
 
 
-def BlobResourceResult(uri, blob, mime_type=None):
-    if isinstance(blob, bytes):
-        blob = b64encode(blob).decode('ascii')
+def ToolTextResource(uri, text):
+    return ToolResult(type='resource', resource={'uri': uri, 'text': text, 'mimeType': 'text/plain'})
 
-    return Result(type='resource', resource={'uri': uri, 'blob': blob} | ({'mimeType': mime_type} if mime_type else {}))
+
+def ToolBlobResource(uri, blob, mime_type=None):
+    return ToolResult(
+        type='resource',
+        resource={'uri': uri, 'blob': b64encode(blob).decode('ascii')} | ({'mimeType': mime_type} if mime_type else {}),
+    )
 
 
 class Tools(Plugin, dict):
@@ -47,74 +53,77 @@ class Tools(Plugin, dict):
     METHOD_NOT_FOUND = -32601
     INVALID_PARAMS = -32602
 
-    def __init__(self, name, dist, **config):
-        super().__init__(name, dist, **config)
-        self.rpc_exports = {'list': self.list, 'call': self.call}
-
-    @classmethod
-    def exports(cls):
-        return [TextResult, ImageResult, TextResourceResult, BlobResourceResult]
-
-    @classmethod
-    def decorators(cls):
-        return [('tool', cls.register)]
+    @property
+    def rpc_exports(self):
+        return {'list': self.list, 'call': self.call}
 
     @property
     def infos(self):
         return {'listChanged': False} if self else {}
 
     def register(self, f, name=None, description=None):
-        name = name or f.__name__
-        description = description or f.__doc__ or ''
-        self[name] = (f, description)
+        schema = proto_to_jsonschema(f, name, description)
+        proto = jsonschema_to_proto(schema)
+        self[proto.__name__] = (proto, 'outputSchema' in schema, f, description)
 
         return f
 
     def list(self, app, request_id, **params):
-        tools = []
-        for name, (f, description) in sorted(self.items()):
-            params, required, return_type = inspect_function(f)
+        schemas = [proto_to_jsonschema(f, name, description) for name, (_, _, f, description) in sorted(self.items())]
 
-            tools.append(
-                {
-                    'name': name,
-                    'description': description,
-                    'inputSchema': {'properties': params, 'required': tuple(required), 'type': return_type},
-                }
-            )
+        return app.create_rpc_response(request_id, {'tools': schemas})
 
-        return app.create_rpc_response(request_id, {'tools': tools})
+    @classmethod
+    def to_content(cls, result):
+        if result is None:
+            return []
+
+        if not isinstance(result, (str | ToolResult | list | tuple)):
+            result = pydantic_core.to_json(result, fallback=str, indent=2).decode()
+
+        if isinstance(result, str):
+            result = ToolText(result)
+
+        return list(chain(*[cls.to_content(item) for item in result])) if isinstance(result, list | tuple) else [result]
+
+    @staticmethod
+    def create_tool_error(msg):
+        return {'isError': True, 'content': [{'type': 'text', 'text': msg}]}
+
+    @classmethod
+    def create_tool_response(cls, with_structured_content, result):
+        content = cls.to_content(result)
+        response = {'isError': False, 'content': content}
+
+        if content and with_structured_content:
+            structured_content = pydantic_core.to_jsonable_python(result, fallback=attrgetter('__dict__'))
+            if not isinstance(structured_content, dict):
+                structured_content = {'result': structured_content}
+
+            response |= {'structuredContent': structured_content}
+
+        return response
 
     def call(self, app, request_id, name, services_service, arguments=None, **params):
         arguments = arguments or {}
         log.debug("Calling tool '%s' with %r", name, arguments)
 
-        f, _ = self.get(name, (None, None))
-        if f is None:
+        proto, with_structured_content, f, _ = self.get(name, (None,) * 4)
+        if proto is None:
             return app.create_rpc_error(request_id, self.METHOD_NOT_FOUND, 'tool not found')
 
         try:
-            params, required, return_type = inspect_function(f)
-            params = [(name, meta['type']) for name, meta in params.items()]
-
-            create_prototype(name, '', params, required, return_type)(**arguments)
+            proto(**arguments)
         except Exception as e:
             return app.create_rpc_error(request_id, self.INVALID_PARAMS, str(e))
 
         try:
-            results = services_service(f, **arguments)
+            response = self.create_tool_response(with_structured_content, services_service(f, **arguments))
         except Exception as e:
             self.logger.exception(e)
+            response = self.create_tool_error(str(e))
 
-            return app.create_rpc_response(request_id, {'isError': True, 'content': [TextResult(str(e))]})
+        return app.create_rpc_response(request_id, response)
 
-        response = {}
-        for result in results if isinstance(results, (list, tuple)) else [results]:
-            if isinstance(result, Result):
-                response.setdefault('content', []).append(result)
-            elif isinstance(result, dict):
-                response['structuredContent'] = result
-            else:
-                response.setdefault('content', []).append(TextResult(result))
-
-        return app.create_rpc_response(request_id, {'isError': False} | response)
+    EXPORTS = [ToolImage, ToolTextResource, ToolBlobResource]
+    DECORATORS = [('tool', register)]

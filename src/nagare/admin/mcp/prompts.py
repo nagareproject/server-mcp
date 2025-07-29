@@ -11,7 +11,7 @@ from pydoc import plaintext
 import yaml
 
 from nagare.admin import admin
-from nagare.server.mcp.utils import create_prototype
+from nagare.server.mcp.prototypes import jsonschema_to_proto
 
 from .commands import Command
 
@@ -23,12 +23,15 @@ class Prompts(admin.Commands):
 class Prompt(Command):
     def create_prompts(self):
         return {
-            prompt['name']: create_prototype(
-                prompt['name'],
-                prompt.get('description', ''),
-                [(argument['name'], 'string') for argument in prompt['arguments']],
-                {argument['name'] for argument in prompt['arguments'] if argument['required']},
-                None,
+            prompt['name']: jsonschema_to_proto(
+                {
+                    'name': prompt['name'],
+                    'description': prompt.get('description', ''),
+                    'inputSchema': {
+                        'properties': {arg['name']: {'type': 'string'} for arg in prompt['arguments']},
+                        'required': {arg['name'] for arg in prompt['arguments'] if arg.get('default', True)},
+                    },
+                }
             )
             for prompt in self.send('prompts/list')['prompts']
         }
@@ -59,7 +62,7 @@ class Get(Prompt):
 
         func = prompts.get(prompt)
         if func is None:
-            print('Error: tool not found!')
+            print('Protocol Error: prompt not found')
             return -1
 
         try:
@@ -74,6 +77,10 @@ class Get(Prompt):
             return -1
 
         result = self.send('prompts/get', name=prompt, arguments=args)
-        print(yaml.dump(result['messages']))
+
+        if 'code' in result:
+            print('Protocol Error:', result.get('message') or result['code'])
+        else:
+            print(yaml.dump(result['messages']))
 
         return 0

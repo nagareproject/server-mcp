@@ -317,14 +317,14 @@ class MCPApp(RESTApp):
 
     @classmethod
     def exports(cls):
-        return {o.__name__: o for capability in cls.capabilities.values() for o in capability.exports()}
+        return {o.__name__: o for capability in cls.capabilities.values() for o in capability.EXPORTS}
 
     @classmethod
     def decorators(cls):
         return {
             name: lambda *args, _d=decorator, _c=capability, **kw: lambda f: _d(_c, f, *args, **kw)
             for capability in cls.capabilities.values()
-            for name, decorator in capability.decorators()
+            for name, decorator in capability.DECORATORS
         }
 
     @staticmethod
