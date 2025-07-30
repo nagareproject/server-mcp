@@ -10,13 +10,16 @@
 import io
 import re
 import types
-from operator import itemgetter
+import inspect
 
 from nagare.services.plugin import Plugin
 
 
 class Resources(Plugin):
     PLUGIN_CATEGORY = 'nagare.applications'
+
+    INVALID_PARAMS = -32602
+    INTERNAL_ERROR = -32603
 
     def __init__(self, name, dist, **config):
         super().__init__(name, dist, **config)
@@ -40,7 +43,7 @@ class Resources(Plugin):
     def register(self, f, uri=None, name=None, mime_type='text/plain', description=None, completions=None):
         name = name or f.__name__
         uri = uri or name
-        description = description or f.__doc__ or ''
+        description = description or inspect.cleandoc(f.__doc__ or '')
 
         regexp = re.sub('{(.+?)}', r'(?P<\1>.+?)', uri)
         if regexp == uri:
@@ -51,63 +54,55 @@ class Resources(Plugin):
         return f
 
     def list_concretes(self, app, request_id, **params):
-        resources = []
-
-        for uri, (_, name, mime_type, description) in self.concrete_resources.items():
-            resource = {'uri': uri, 'name': name}
-            if description is not None:
-                resource['description'] = description
-            if mime_type is not None:
-                resource['mimeType'] = mime_type
-
-            resources.append(resource)
+        resources = [
+            {'uri': uri, 'name': name}
+            | ({'description': description} if description is not None else {})
+            | ({'mimeType': mime_type} if mime_type is not None else {})
+            for uri, (_, name, mime_type, description) in self.concrete_resources.items()
+        ]
 
         return app.create_rpc_response(request_id, {'resources': resources})
 
     def list_templates(self, app, request_id, **params):
-        resources = []
-
-        for uri, (_, _, name, mime_type, description, _) in self.template_resources.items():
-            resource = {'uriTemplate': uri, 'name': name}
-            if description is not None:
-                resource['description'] = description
-            if mime_type is not None:
-                resource['mimeType'] = mime_type
-
-            resources.append(resource)
+        resources = [
+            {'uriTemplate': uri, 'name': name}
+            | ({'description': description} if description is not None else {})
+            | ({'mimeType': mime_type} if mime_type is not None else {})
+            for uri, (_, _, name, mime_type, description, _) in self.template_resources.items()
+        ]
 
         return app.create_rpc_response(request_id, {'resourceTemplates': resources})
 
     def complete(self, app, request_id, argument, ref, **params):
-        values = self.template_resources[ref['uri']][5].get(argument['name'], lambda v: [])(argument['value'])
+        completions = self.template_resources.get(ref.get('uri'), (None,))[-1]
+        if completions is None:
+            return app.create_rpc_error(request_id, self.INVALID_PARAMS, 'completion not found')
+
+        values = completions.get(argument.get('name'), lambda v: [])(argument['value'])
 
         return app.create_rpc_response(request_id, {'completion': {'values': values}})
 
     def read(self, app, request_id, uri, services_service, **params):
+        params = {}
         f, name, mime_type, _ = self.concrete_resources.get(uri, (None,) * 4)
-        if f is not None:
-            keywords = {}
-        else:
-            matching_resources = filter(
-                itemgetter(0),
-                (
-                    (params[0].fullmatch(uri), uri_template, params)
-                    for uri_template, params in self.template_resources.items()
-                ),
-            )
-            match, uri, params = next(matching_resources, (None, None, None))
-            if match is None:
-                return
 
-            keywords = match.groupdict()
-            _, f, name, mime_type, _, _ = params
+        if f is None:
+            for template_uri, (regexp, f, name, mime_type, _, _) in self.template_resources.items():
+                if match := regexp.fullmatch(uri):
+                    uri = template_uri
+                    params = match.groupdict()
+                    break
+            else:
+                return app.create_rpc_error(request_id, self.INVALID_PARAMS, 'resource not found')
 
-        data = services_service(f, uri, name, **keywords)
-        if not isinstance(data, (list, tuple, types.GeneratorType)):
-            data = [data]
+        try:
+            data = services_service(f, uri, name, **params)
+        except Exception as e:
+            self.logger.exception(e)
+            return app.create_rpc_error(request_id, self.INTERNAL_ERROR, str(e))
 
         streams = []
-        for stream in data:
+        for stream in data if isinstance(data, (list, tuple, types.GeneratorType)) else [data]:
             if isinstance(stream, str):
                 stream = io.StringIO(stream)
             elif isinstance(stream, bytes):

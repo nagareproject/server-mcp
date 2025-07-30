@@ -62,7 +62,7 @@ class Get(Prompt):
 
         func = prompts.get(prompt)
         if func is None:
-            print('Protocol Error: prompt not found')
+            print('Error: prompt not found')
             return -1
 
         try:
@@ -79,8 +79,9 @@ class Get(Prompt):
         result = self.send('prompts/get', name=prompt, arguments=args)
 
         if 'code' in result:
-            print('Protocol Error:', result.get('message') or result['code'])
-        else:
-            print(yaml.dump(result['messages']))
+            print('Error:', result.get('message') or result['code'])
+            return -1
+
+        print(yaml.dump(result.get('messages', '')))
 
         return 0

@@ -4,21 +4,21 @@ Nagare Model Context Protocol server
 
 Features:
 
-  - Available capabilities:
+- Available capabilities:
 
-    - tools (with services injection)
-    - resources (direct and template)
-    - prompts
-    - roots
-    - optional completions for resources and prompts arguments
+- tools (with services injection)
+- resources (direct and template)
+- prompts
+- roots
+- optional completions for resources and prompts arguments
 
-  - Available utilities:
+- Available utilities:
 
-    - server can send logs to the client (`client_service.progress()`)
-    - server can send progresses to the client (`client_service.log()`)
+- server can send logs to the client (`client_service.progress()`)
+- server can send progresses to the client (`client_service.log()`)
 
-  - STDIO and SSE protocols support
-  - Admin commands for discovery and invocation of SSE server methods
+- STDIO and SSE protocols support
+- Admin commands for discovery and invocation of SSE server methods
 
 Protocols
 =========
@@ -87,7 +87,7 @@ MCP server example
 
         return 'Hello'
 
-        # Resources
+    # Resources
     # ---------
 
     @resource()
@@ -137,8 +137,6 @@ Admin commands
     nagare mcp tools call add -p a=10 -p b=20 http://127.0.0.1:9000/sse
 
     nagare mcp resources list http://127.0.0.1:9000/sse
-
-    nagare mcp resources describe <uri> [-n <resource_index>] http://127.0.0.1:9000/sse
 
     nagare mcp resources read <uri> [-n <resource_index>] http://127.0.0.1:9000/sse
 

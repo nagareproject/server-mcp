@@ -84,7 +84,7 @@ class Command(admin.Command):
         t.start()
 
     def send_data(self, data):
-        httpx.post(self.endpoint, json=data, timeout=5)
+        httpx.post(self.endpoint, json=data, timeout=5).raise_for_status()
 
     def send(self, method, **params):
         self.send_data({'jsonrpc': '2.0', 'id': 0, 'method': method, 'params': params})
@@ -93,20 +93,24 @@ class Command(admin.Command):
     def initialize(self, roots, url, **arguments):
         self.roots = roots or []
 
-        self.start_events_listener(url)
-        endpoint = self.receive_event()
-        self.endpoint = urljoin(url, endpoint)
+        try:
+            self.start_events_listener(url)
+            endpoint = self.receive_event()
+            self.endpoint = urljoin(url, endpoint)
 
-        self.server_info = self.send(
-            'initialize',
-            protocolVersion='2024-11-05',
-            capabilities={'roots': {'listChanged': False}},
-            clientInfo={'name': 'NagareClient', 'version': self.version},
-        )
+            self.server_info = self.send(
+                'initialize',
+                protocolVersion='2024-11-05',
+                capabilities={'roots': {'listChanged': False}},
+                clientInfo={'name': 'NagareClient', 'version': self.version},
+            )
 
-        self.send_data({'jsonrpc': '2.0', 'method': 'notifications/initialized'})
+            self.send_data({'jsonrpc': '2.0', 'method': 'notifications/initialized'})
 
-        return self.run(**arguments)
+            return self.run(**arguments)
+        except Exception as e:
+            print('Error:', e)
+            return -1
 
     def list_roots(self, request_id):
         self.send_data(

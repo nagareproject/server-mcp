@@ -94,7 +94,11 @@ class Prompts(Plugin, dict):
         return app.create_rpc_response(request_id, {'prompts': prompts})
 
     def complete(self, app, request_id, argument, ref, **params):
-        values = self[ref['name']][-1].get(argument['name'], lambda v: [])(argument['value'])
+        name = ref.get('name')
+        if name not in self:
+            return app.create_rpc_error(request_id, self.INVALID_PARAMS, 'completion not found')
+
+        values = self[name][-1].get(argument.get('name'), lambda v: [])(argument['value'])
 
         return app.create_rpc_response(request_id, {'completion': {'values': values}})
 
@@ -116,8 +120,10 @@ class Prompts(Plugin, dict):
             return app.create_rpc_error(request_id, self.INTERNAL_ERROR, str(e))
 
         response = {
-            'messages': (result if isinstance(result, PromptResult) else PromptText(result))
-            for result in (results if isinstance(results, (list, tuple)) else [results])
+            'messages': [
+                (result if isinstance(result, PromptResult) else PromptText(result))
+                for result in (results if isinstance(results, (list, tuple)) else [results])
+            ]
         }
 
         return app.create_rpc_response(request_id, response)

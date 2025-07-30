@@ -6,6 +6,7 @@
 # the file LICENSE.txt, which you should have received as part of
 # this distribution.
 # --
+
 import sys
 from base64 import b64decode
 
@@ -58,42 +59,36 @@ class TemplatesList(Command):
         return 0
 
 
-class Describe(Command):
-    DESC = 'Describe a resource'
-
-    def set_arguments(self, parser):
-        parser.add_argument('-n', type=int, default=1)
-        parser.add_argument('uri')
-
-        super().set_arguments(parser)
-
-    def run(self, uri, n):
-        contents = self.send('resources/read', uri=uri)['contents']
-        content = contents[n - 1]
-        blob = content.pop('blob', None)
-        data = b64decode(blob) if blob is not None else content['text']
-        content.pop('text', None)
-
-        print(yaml.dump(content | {'contents': len(contents), 'length': len(data)}))
-
-        return 0
-
-
 class Read(Command):
     DESC = 'Fetch a resource'
 
     def set_arguments(self, parser):
-        parser.add_argument('-n', type=int, default=0)
+        parser.add_argument('-n', type=int, default=None, help='display a specific content')
         parser.add_argument('uri')
 
         super().set_arguments(parser)
 
     def run(self, uri, n):
-        content = self.send('resources/read', uri=uri)['contents'][n - 1]
-        blob = content.get('blob')
-        if blob is not None:
-            sys.stdout.buffer.write(b64decode(blob))
+        result = self.send('resources/read', uri=uri)
+
+        if (code := result.get('code')) is not None:
+            print('Error:', result.get('message', code))
+            return -1
+
+        contents = result.get('contents', ())
+
+        if n:
+            if (nb := len(contents)) < n:
+                print(f'Error: only {nb} contents available')
+                return -1
+
+            content = contents[n - 1]
+
+            if blob := content.get('blob'):
+                sys.stdout.buffer.write(b64decode(blob))
+            else:
+                print(content['text'])
         else:
-            print(content['text'])
+            print(yaml.dump([content | ({'blob': '...'} if 'blob' in content else {}) for content in contents]))
 
         return 0

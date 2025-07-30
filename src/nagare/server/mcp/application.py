@@ -18,6 +18,8 @@ from base64 import b64encode
 from functools import reduce, partial
 from itertools import dropwhile
 
+from webob.exc import HTTPNotFound, HTTPBadRequest
+
 from nagare import log
 from nagare.services.router import route_for
 from nagare.services.plugins import Plugins
@@ -39,6 +41,7 @@ class ClientServices:
 
 
 class Client:
+    METHOD_NOT_FOUND = -32601
     CLEANUP_PERIODICITY = 10
     LOGGING_LEVELS = {
         name: i for i, name in enumerate('debug info notice warning error critical alert emergency'.split())
@@ -188,7 +191,7 @@ class Client:
                 client=ClientServices(self, params.get('_meta', {}).get('progressToken'), self.roots)
             )
 
-            return services(self.invoke, method.replace('.', '/').split('/'), request.get('id'), **params)
+            return services(self.invoke, method.replace('.', '/'), request.get('id'), **params)
 
         if error := request.get('error'):
             self.logger.error(error)
@@ -205,11 +208,15 @@ class Client:
 
     # --- JSON-RPC Method Handlers ---
 
-    def invoke(self, method_names, *args, services_service, **kw):
+    def invoke(self, method, request_id, services_service, **kw):
         # Follow the `rpc_exports` dictionnaries hierarchy to find the target function
-        f = reduce(lambda d, name: d.get(name, {}), method_names, self.rpc_exports)
+        f = reduce(lambda d, name: d.get(name, {}), method.split('/'), self.rpc_exports)
 
-        return services_service(f, self, *args, **kw) if callable(f) else None
+        return (
+            services_service(f, self, request_id, **kw)
+            if callable(f)
+            else self.create_rpc_error(request_id, self.METHOD_NOT_FOUND, f'rpc method `{method}` not found')
+        )
 
     def initialize(self, client_protocol_version, client_capabilities):
         self.logger.info(
@@ -249,9 +256,9 @@ class Client:
         return self.create_rpc_response(request_id, {})
 
     @staticmethod
-    def complete(self, *args, argument, ref, services_service, **params):
+    def complete(self, request_id, argument, ref, services_service, **params):
         return services_service(
-            self.invoke, ((ref['type'].removeprefix('ref/')) + 's', 'complete'), *args, argument, ref, **params
+            self.invoke, '{}s/complete'.format(ref['type'].removeprefix('ref/')), request_id, argument=argument, ref=ref
         )
 
     def notify_progress(self, progress_token, progress, total=None, message=None):
@@ -337,7 +344,13 @@ class MCPApp(RESTApp):
             if stdio_client is None:
                 stdio_client = self.clients['stdio'] = self.create_client('stdio')
 
-            response = self.services(stdio_client.handle_json_rpc, json.loads(stdin))
+            try:
+                payload = json.loads(stdin)
+            except json.JSONDecodeError:
+                self.logger.error('invalid json RPC: %s', stdin)
+                response = None
+            else:
+                response = self.services(stdio_client.handle_json_rpc, payload)
         else:
             response.status_code = 202
             response.start_response = start_response
@@ -355,7 +368,7 @@ class MCPApp(RESTApp):
             {
                 'protocolVersion': self.PROTOCOL_VERSION,
                 'serverInfo': {'name': self.server_name, 'version': self.version},
-                'capabilities': {'roots': {}, 'completion': {}, 'logging': {}}
+                'capabilities': {'roots': {}, 'completions': {}, 'logging': {}}
                 | {name: capability.infos for name, capability in self.capabilities.items() if capability},
             },
         )
@@ -393,6 +406,14 @@ def create_channel(self, url, method, request, response):
 
 @route_for(MCPApp, '{client_id:[a-f0-9-]+}', 'POST')
 def handle_json_rpc(self, url, method, request, response, client_id):
-    client = self.clients[client_id]
+    client = self.clients.get(client_id)
+    if client is None:
+        raise HTTPNotFound()
 
-    return [client, self.services(client.handle_json_rpc, request.json_body)]
+    try:
+        payload = request.json_body
+    except json.JSONDecodeError:
+        self.logger.error('invalid json RPC: %s', request.body)
+        raise HTTPBadRequest()
+
+    return [client, self.services(client.handle_json_rpc, payload)]
