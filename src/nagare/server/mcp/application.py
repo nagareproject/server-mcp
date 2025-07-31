@@ -42,6 +42,9 @@ class ClientServices:
 
 class Client:
     METHOD_NOT_FOUND = -32601
+    INVALID_PARAMS = -32602
+    INTERNAL_ERROR = -32603
+
     CLEANUP_PERIODICITY = 10
     LOGGING_LEVELS = {
         name: i for i, name in enumerate('debug info notice warning error critical alert emergency'.split())

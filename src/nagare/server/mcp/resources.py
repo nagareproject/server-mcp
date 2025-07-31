@@ -18,9 +18,6 @@ from nagare.services.plugin import Plugin
 class Resources(Plugin):
     PLUGIN_CATEGORY = 'nagare.applications'
 
-    INVALID_PARAMS = -32602
-    INTERNAL_ERROR = -32603
-
     def __init__(self, name, dist, **config):
         super().__init__(name, dist, **config)
 
@@ -53,7 +50,7 @@ class Resources(Plugin):
 
         return f
 
-    def list_concretes(self, app, request_id, **params):
+    def list_concretes(self, client, request_id, **params):
         resources = [
             {'uri': uri, 'name': name}
             | ({'description': description} if description is not None else {})
@@ -61,9 +58,9 @@ class Resources(Plugin):
             for uri, (_, name, mime_type, description) in self.concrete_resources.items()
         ]
 
-        return app.create_rpc_response(request_id, {'resources': resources})
+        return client.create_rpc_response(request_id, {'resources': resources})
 
-    def list_templates(self, app, request_id, **params):
+    def list_templates(self, client, request_id, **params):
         resources = [
             {'uriTemplate': uri, 'name': name}
             | ({'description': description} if description is not None else {})
@@ -71,18 +68,18 @@ class Resources(Plugin):
             for uri, (_, _, name, mime_type, description, _) in self.template_resources.items()
         ]
 
-        return app.create_rpc_response(request_id, {'resourceTemplates': resources})
+        return client.create_rpc_response(request_id, {'resourceTemplates': resources})
 
-    def complete(self, app, request_id, argument, ref, **params):
+    def complete(self, client, request_id, argument, ref, **params):
         completions = self.template_resources.get(ref.get('uri'), (None,))[-1]
         if completions is None:
-            return app.create_rpc_error(request_id, self.INVALID_PARAMS, 'completion not found')
+            return client.create_rpc_error(request_id, client.INVALID_PARAMS, 'completion not found')
 
         values = completions.get(argument.get('name'), lambda v: [])(argument['value'])
 
-        return app.create_rpc_response(request_id, {'completion': {'values': values}})
+        return client.create_rpc_response(request_id, {'completion': {'values': values}})
 
-    def read(self, app, request_id, uri, services_service, **params):
+    def read(self, client, request_id, uri, services_service, **params):
         params = {}
         f, name, mime_type, _ = self.concrete_resources.get(uri, (None,) * 4)
 
@@ -93,13 +90,13 @@ class Resources(Plugin):
                     params = match.groupdict()
                     break
             else:
-                return app.create_rpc_error(request_id, self.INVALID_PARAMS, 'resource not found')
+                return client.create_rpc_error(request_id, client.INVALID_PARAMS, 'resource not found')
 
         try:
             data = services_service(f, uri, name, **params)
         except Exception as e:
             self.logger.exception(e)
-            return app.create_rpc_error(request_id, self.INTERNAL_ERROR, str(e))
+            return client.create_rpc_error(request_id, client.INTERNAL_ERROR, str(e))
 
         streams = []
         for stream in data if isinstance(data, (list, tuple, types.GeneratorType)) else [data]:
@@ -110,7 +107,7 @@ class Resources(Plugin):
 
             streams.append((uri, mime_type, stream))
 
-        return app.create_rpc_streaming_response(request_id, streams)
+        return client.create_rpc_streaming_response(request_id, streams)
 
     EXPORTS = []
     DECORATORS = [('resource', register)]

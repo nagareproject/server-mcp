@@ -50,9 +50,6 @@ def ToolBlobResource(uri, blob, mime_type=None):
 class Tools(Plugin, dict):
     PLUGIN_CATEGORY = 'nagare.applications'
 
-    METHOD_NOT_FOUND = -32601
-    INVALID_PARAMS = -32602
-
     @property
     def rpc_exports(self):
         return {'list': self.list, 'call': self.call}
@@ -68,10 +65,10 @@ class Tools(Plugin, dict):
 
         return f
 
-    def list(self, app, request_id, **params):
+    def list(self, client, request_id, **params):
         schemas = [proto_to_jsonschema(f, name, description) for name, (_, _, f, description) in sorted(self.items())]
 
-        return app.create_rpc_response(request_id, {'tools': schemas})
+        return client.create_rpc_response(request_id, {'tools': schemas})
 
     @classmethod
     def to_content(cls, result):
@@ -104,18 +101,18 @@ class Tools(Plugin, dict):
 
         return response
 
-    def call(self, app, request_id, name, services_service, arguments=None, **params):
+    def call(self, client, request_id, name, services_service, arguments=None, **params):
         arguments = arguments or {}
         log.debug("Calling tool '%s' with %r", name, arguments)
 
         proto, with_structured_content, f, _ = self.get(name, (None,) * 4)
         if proto is None:
-            return app.create_rpc_error(request_id, self.METHOD_NOT_FOUND, 'tool not found')
+            return client.create_rpc_error(request_id, client.METHOD_NOT_FOUND, 'tool not found')
 
         try:
             proto(**arguments)
         except Exception as e:
-            return app.create_rpc_error(request_id, self.INVALID_PARAMS, str(e))
+            return client.create_rpc_error(request_id, client.INVALID_PARAMS, str(e))
 
         try:
             response = self.create_tool_response(with_structured_content, services_service(f, **arguments))
@@ -123,7 +120,7 @@ class Tools(Plugin, dict):
             self.logger.exception(e)
             response = self.create_tool_error(str(e))
 
-        return app.create_rpc_response(request_id, response)
+        return client.create_rpc_response(request_id, response)
 
     EXPORTS = [ToolImage, ToolTextResource, ToolBlobResource]
     DECORATORS = [('tool', register)]

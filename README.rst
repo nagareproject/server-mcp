@@ -6,16 +6,16 @@ Features:
 
 - Available capabilities:
 
-- tools (with services injection)
-- resources (direct and template)
-- prompts
-- roots
-- optional completions for resources and prompts arguments
+  - tools (with services injection)
+  - resources (direct and template)
+  - prompts
+  - roots
+  - optional completions for resources and prompts arguments
 
 - Available utilities:
 
-- server can send logs to the client (`client_service.progress()`)
-- server can send progresses to the client (`client_service.log()`)
+  - server can send logs to the client (`client_service.progress()`)
+  - server can send progresses to the client (`client_service.log()`)
 
 - STDIO and SSE protocols support
 - Admin commands for discovery and invocation of SSE server methods

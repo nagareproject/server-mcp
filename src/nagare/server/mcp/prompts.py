@@ -55,7 +55,6 @@ def PromptBlobResource(uri, blob, role='user', mime_type=None):
 class Prompts(Plugin, dict):
     PLUGIN_CATEGORY = 'nagare.applications'
 
-    INVALID_PARAMS = -32602
     INTERNAL_ERROR = -32603
 
     @property
@@ -73,7 +72,7 @@ class Prompts(Plugin, dict):
 
         return f
 
-    def list(self, app, request_id, **params):
+    def list(self, client, request_id, **params):
         prompts = []
         for name, (_, f, description, descriptions, _) in sorted(self.items()):
             schema = proto_to_jsonschema(f, name, description)
@@ -91,33 +90,33 @@ class Prompts(Plugin, dict):
                 }
             )
 
-        return app.create_rpc_response(request_id, {'prompts': prompts})
+        return client.create_rpc_response(request_id, {'prompts': prompts})
 
-    def complete(self, app, request_id, argument, ref, **params):
+    def complete(self, client, request_id, argument, ref, **params):
         name = ref.get('name')
         if name not in self:
-            return app.create_rpc_error(request_id, self.INVALID_PARAMS, 'completion not found')
+            return client.create_rpc_error(request_id, client.INVALID_PARAMS, 'completion not found')
 
         values = self[name][-1].get(argument.get('name'), lambda v: [])(argument['value'])
 
-        return app.create_rpc_response(request_id, {'completion': {'values': values}})
+        return client.create_rpc_response(request_id, {'completion': {'values': values}})
 
-    def get(self, app, request_id, name, arguments, services_service, **kw):
+    def get(self, client, request_id, name, arguments, services_service, **kw):
         if name not in self:
-            return app.create_rpc_error(request_id, self.INVALID_PARAMS, 'prompt not found')
+            return client.create_rpc_error(request_id, client.INVALID_PARAMS, 'prompt not found')
 
         proto, f = self[name][:2]
 
         try:
             proto(**arguments)
         except Exception as e:
-            return app.create_rpc_error(request_id, self.INVALID_PARAMS, str(e))
+            return client.create_rpc_error(request_id, client.INVALID_PARAMS, str(e))
 
         try:
             results = services_service(f, **arguments)
         except Exception as e:
             self.logger.exception(e)
-            return app.create_rpc_error(request_id, self.INTERNAL_ERROR, str(e))
+            return client.create_rpc_error(request_id, client.INTERNAL_ERROR, str(e))
 
         response = {
             'messages': [
@@ -126,7 +125,7 @@ class Prompts(Plugin, dict):
             ]
         }
 
-        return app.create_rpc_response(request_id, response)
+        return client.create_rpc_response(request_id, response)
 
     EXPORTS = [PromptText, PromptImage, PromptTextResource, PromptBlobResource]
     DECORATORS = [('prompt', register)]
