@@ -9,6 +9,7 @@ Features:
   - tools (with services injection)
   - resources (direct and template)
   - prompts
+  - sampling
   - roots
   - optional completions for resources and prompts arguments
 
@@ -17,6 +18,7 @@ Features:
   - server can send logs to the client (`client_service.progress()`)
   - server can send progresses to the client (`client_service.log()`)
 
+- Compliance to protocol revision `2024-11-05`
 - STDIO and SSE protocols support
 - Admin commands for discovery and invocation of SSE server methods
 
